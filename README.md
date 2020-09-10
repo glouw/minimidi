@@ -6,6 +6,10 @@ MIDI parser and player capable of generating OPL3 like waveforms.
 
     pacman -S sdl2
 
+## Building
+
+    make
+
 ## Usage
 
     ./minimidi <file> <instrument [0,1,2,3...7]> <loop [0, 1]>
