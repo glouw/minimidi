@@ -16,6 +16,7 @@ The MIDI, audio(MP3, OGG) and video files of Bernd Krueger are licensed under th
 This means, that you can use and adapt the files, as long as you attribute to the copyright holder:
 
 Name: Bernd Krueger
+
 Source: http://www.piano-midi.de
 
 The distribution or public playback of the files is only allowed under identical license conditions.
