@@ -3,9 +3,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_thread.h>
 #include <assert.h>
+#include "SDLite.c"
 #include "Error.c"
 #include "Bytes.c"
 #include "Note.c"
