@@ -15,7 +15,7 @@ static void
 {
     const char* const grn = "\x1b[0;32m";
     const char* const red = "\x1b[0;31m";
-    const char* const reset = "\x1b[0;0m";
+    const char* const nrm = "\x1b[0;00m";
     int32_t id = 0;
     for(uint32_t y = 0; y < notes->display_rows; y++)
     {
@@ -32,7 +32,7 @@ static void
     // GO UP BY NUMBER OF DISPLAY ROWS AND LEFTMOST COLUMN.
     printf("\x1B[%dA", notes->display_rows);
     printf("\r");
-    printf(reset);
+    printf(nrm);
 }
 
 static Notes
@@ -42,7 +42,7 @@ static Notes
     Notes notes = { 0 };
     notes.size = 128;
     notes.note = calloc(notes.size, sizeof(*notes.note));
-    notes.display_rows = 4;
+    notes.display_rows = 8;
     notes.display_cols = notes.size / notes.display_rows;
     return notes;
 }
