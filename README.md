@@ -2,6 +2,8 @@
 
 MIDI parser and player capable of generating OPL3 like waveforms.
 
+![](image/screen.png)
+
 ## Libs
 
     pacman -S sdl2
