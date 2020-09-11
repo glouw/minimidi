@@ -97,16 +97,15 @@ static uint32_t
 
 static void
 (Midi_Play)
-(Midi* midi, Notes* notes)
+(Midi* midi, Notes* notes, TrackMeta* meta)
 {
-    TrackMeta meta = { 0 };
     for(;;)
     {
         for(uint32_t i = 0; i < midi->track_count; i++)
-            Track_Play(&midi->track[i], notes, &meta);
+            Track_Play(&midi->track[i], notes, meta);
         if(Midi_Done(midi))
             break;
-        const uint32_t microseconds = Midi_ToMicrosecondDelay(midi, &meta);
+        const uint32_t microseconds = Midi_ToMicrosecondDelay(midi, meta);
         const uint32_t milliseconds = roundf(microseconds / 1000.0f);
         SDL_Delay(milliseconds);
     }

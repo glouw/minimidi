@@ -52,28 +52,25 @@ static int16_t
 }
 
 static int16_t
-(Note_Square)
-(Note* note, const uint32_t id, const uint32_t sample_freq)
-{
-    const int16_t wave = Note_Sin(note, id, sample_freq);
-    const int32_t gain = SDL_AtomicGet(&note->gain);
-    return gain * (wave > 0 ? 1 : -1);
-}
-
-static int16_t
-(*NOTE_INTRUMENTS[])
+(*NOTE_WAVEFORMS[])
 (Note* note, const uint32_t id, const uint32_t sample_freq) = {
-    [0] = Note_Sin,
-    [1] = Note_SinHalf,
-    [2] = Note_SinAbs,
-    [3] = Note_SinQuarter,
-    [4] = /* TEMP */ Note_Sin,
-    [5] = /* TEMP */ Note_Sin,
-    [6] = /* TEMP */ Note_Sin,
-    [7] = Note_Square,
+    [ INSTRUMENT_PIANO                ] = Note_Sin,
+    [ INSTRUMENT_CHROMATIC_PERCUSSION ] = Note_SinHalf,
+    [ INSTRUMENT_ORGAN                ] = Note_SinAbs,
+    [ INSTRUMENT_GUITAR               ] = Note_SinQuarter,
+    [ INSTRUMENT_BASS                 ] = Note_Sin,
+    [ INSTRUMENT_STRINGS              ] = Note_SinHalf,
+    [ INSTRUMENT_STRINGS_CONTINUED    ] = Note_SinHalf,
+    [ INSTRUMENT_BRASS                ] = Note_SinAbs,
+    [ INSTRUMENT_REED                 ] = Note_SinQuarter,
+    [ INSTRUMENT_PIPE                 ] = Note_Sin,
+    [ INSTRUMENT_SYNTH_LEAD           ] = Note_Sin,
+    [ INSTRUMENT_SYNTH_PAD            ] = Note_SinHalf,
+    [ INSTRUMENT_SYNTH_EFFECTS        ] = Note_SinAbs,
+    [ INSTRUMENT_ETHNIC               ] = Note_SinQuarter,
+    [ INSTRUMENT_PERCUSSIVE           ] = Note_Sin,
+    [ INSTRUMENT_SOUND_EFFECTS        ] = Note_Sin,
 };
-
-static const uint32_t NOTE_MAX_INSTRUMENTS = sizeof(NOTE_INTRUMENTS) / sizeof(NOTE_INTRUMENTS[0]);
 
 static void
 (Note_On)

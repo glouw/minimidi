@@ -6,12 +6,13 @@
 #include <assert.h>
 #include "SDLite.c"
 #include "Error.c"
+#include "Instrument.c"
 #include "Bytes.c"
 #include "Note.c"
 #include "Notes.c"
 #include "Args.c"
-#include "Audio.c"
 #include "Track.c"
+#include "Audio.c"
 #include "Midi.c"
 
 int
@@ -23,12 +24,13 @@ int
     Audio audio = Audio_Init();
     Bytes bytes = Bytes_FromFile(args.file);
     Notes notes = Notes_Init();
-    AudioConsumer consumer = { &audio, &notes, args.instrument };
+    TrackMeta meta = { 0 };
+    AudioConsumer consumer = { &audio, &notes, &meta };
     SDL_Thread* thread = SDL_CreateThread(Audio_Play, "MIDI CONSUMER", &consumer);
     do // PRODUCE.
     {
         Midi midi = Midi_Init(&bytes);
-        Midi_Play(&midi, &notes);
+        Midi_Play(&midi, &notes, &meta);
         Midi_Free(&midi);
     }
     while(args.loop);

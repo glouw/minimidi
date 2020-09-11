@@ -14,7 +14,7 @@ MIDI parser and player capable of generating OPL3 like waveforms.
 
 ## Usage
 
-    ./minimidi <file> <instrument [0,1,2,3...7]> <loop [0, 1]>
+    ./minimidi <file> <loop [0, 1]>
 
 ## Attribution
 

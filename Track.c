@@ -1,5 +1,9 @@
 #pragma once
 
+#define TRACK_CHANNEL_DRUM (10)
+
+#define TRACK_CHANNELS_MAX (16)
+
 typedef struct
 {
     uint8_t* data;
@@ -16,6 +20,7 @@ Track;
 typedef struct
 {
     uint32_t tempo;
+    SDL_atomic_t instruments[TRACK_CHANNELS_MAX];
 }
 TrackMeta;
 
@@ -121,11 +126,9 @@ static uint8_t
     }
 }
 
-static const uint8_t TRACK_CHANNEL_DRUM = 10;
-
 static void
 (Track_RealEvent)
-(Track* track, Notes* notes, const uint8_t leader)
+(Track* track, TrackMeta* meta, Notes* notes, const uint8_t leader)
 {
     const uint8_t channel = leader & 0xF;
     const uint8_t status = leader >> 4;
@@ -140,24 +143,18 @@ static void
         {
             const uint8_t note_index = Track_U8(track);
             Track_U8(track);
-            if(channel != TRACK_CHANNEL_DRUM)
-            {
-                assert(note_index < notes->size);
-                Note* note = &notes->note[note_index];
-                Note_On(note, 0, channel);
-            }
+            assert(note_index < notes->size);
+            Note* note = &notes->note[note_index];
+            Note_On(note, 0, channel);
             break;
         }
         case 0x9: // NOTE ON.
         {
             const uint8_t note_index = Track_U8(track);
             const uint8_t note_velocity = Track_U8(track);
-            if(channel != TRACK_CHANNEL_DRUM)
-            {
-                assert(note_index < notes->size);
-                Note* note = &notes->note[note_index];
-                Note_On(note, note_velocity, channel);
-            }
+            assert(note_index < notes->size);
+            Note* note = &notes->note[note_index];
+            Note_On(note, note_velocity, channel);
             break;
         }
         case 0xA: // NOTE AFTERTOUCH.
@@ -193,7 +190,9 @@ static void
         }
         case 0xC: // PROGRAM CHANGE.
         {
-            Track_U8(track);
+            const uint8_t bank = Track_U8(track);
+            const Instrument instrument = Instrument_FromId(bank);
+            SDL_AtomicSet(&meta->instruments[channel], instrument);
             break;
         }
         case 0xD: // CHANNEL AFTERTOUCH.
@@ -326,7 +325,7 @@ static void
             const uint8_t leader = Track_U8(track);
             leader == 0xFF
                 ? Track_MetaEvent(track, meta)
-                : Track_RealEvent(track, notes, leader);
+                : Track_RealEvent(track, meta, notes, leader);
             // NOTES WITH ZERO DELAY MUST IMMEDIATELY PROCESS
             // THE NEXT NOTE BEFORE MOVING ONTO THE NEXT TRACK.
             Track_Play(track, notes, meta);

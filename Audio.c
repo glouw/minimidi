@@ -12,7 +12,7 @@ typedef struct
 {
     Audio* audio;
     Notes* notes;
-    uint8_t instrument;
+    TrackMeta* meta;
 }
 AudioConsumer;
 
@@ -65,7 +65,11 @@ static int32_t
                     const int32_t gain = SDL_AtomicGet(&note->gain);
                     const bool audible = gain > 0;
                     if(audible)
-                        mix += NOTE_INTRUMENTS[consumer->instrument](note, id, consumer->audio->spec.freq);
+                    {
+                        const int32_t channel = SDL_AtomicGet(&note->channel);
+                        const Instrument instrument = SDL_AtomicGet(&consumer->meta->instruments[channel]);;
+                        mix += NOTE_WAVEFORMS[instrument](note, id, consumer->audio->spec.freq);
+                    }
                 }
                 for(uint32_t channel = 0; channel < consumer->audio->spec.channels; channel++)
                     mixes[sample + channel] = mix;
