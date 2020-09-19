@@ -7,9 +7,7 @@ typedef struct
 }
 Bytes;
 
-static Bytes
-(Bytes_FromFile)
-(FILE* file)
+static Bytes Bytes_FromFile(FILE* file)
 {
     fseek(file, 0, SEEK_END);
     const uint32_t size = ftell(file);
@@ -22,32 +20,24 @@ static Bytes
     return bytes;
 }
 
-static void
-(Bytes_Free)
-(Bytes* bytes)
+static void Bytes_Free(Bytes* bytes)
 {
     free(bytes->data);
     bytes->data = NULL;
     bytes->size = 0;
 }
 
-static uint8_t
-(Bytes_U8)
-(Bytes* bytes, const uint32_t index)
+static uint8_t Bytes_U8(Bytes* bytes, const uint32_t index)
 {
     return bytes->data[index];
 }
 
-static uint16_t
-(Bytes_U16)
-(Bytes* bytes, const uint32_t index)
+static uint16_t Bytes_U16(Bytes* bytes, const uint32_t index)
 {
     return Bytes_U8(bytes, index + 0) << 8 | Bytes_U8(bytes, index + 1);
 }
 
-static uint32_t
-(Bytes_U32)
-(Bytes* bytes, const uint32_t index)
+static uint32_t Bytes_U32(Bytes* bytes, const uint32_t index)
 {
     return Bytes_U16(bytes, index + 0) << 16 | Bytes_U16(bytes, index + 2);
 }

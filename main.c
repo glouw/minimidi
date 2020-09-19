@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <assert.h>
+
 #include "SDLite.c"
 #include "Error.c"
-#include "Instrument.c"
 #include "Bytes.c"
 #include "Note.c"
 #include "Notes.c"
@@ -15,9 +15,7 @@
 #include "Audio.c"
 #include "Midi.c"
 
-int
-(main)
-(const int argc, char** argv)
+int main(const int argc, char** argv)
 {
     SDL_Init(SDL_INIT_AUDIO);
     Args args = Args_Init(argc, argv);

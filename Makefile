@@ -1,5 +1,5 @@
 CFLAGS  = -Wall -Wextra -Wpedantic -std=gnu99 -lm -lSDL2
-CFLAGS += -O2 -march=native
+CFLAGS += -g -O0 -march=native
 
 CC = gcc
 

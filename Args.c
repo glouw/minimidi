@@ -7,9 +7,7 @@ typedef struct
 }
 Args;
 
-static Args
-(Args_Init)
-(const int argc, char** argv)
+static Args Args_Init(const int argc, char** argv)
 {
     Args args = { 0 };
     args.loop = false;
@@ -28,9 +26,7 @@ static Args
     return args;
 }
 
-static void
-(Args_Free)
-(Args* args)
+static void Args_Free(Args* args)
 {
     fclose(args->file);
 }

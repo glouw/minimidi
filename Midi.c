@@ -11,9 +11,7 @@ typedef struct
 }
 Midi;
 
-static Midi
-(Midi_Init)
-(Bytes* bytes)
+static Midi Midi_Init(Bytes* bytes)
 {
     Midi midi = { 0 };
     midi.id = Bytes_U32(bytes, 0);
@@ -35,9 +33,7 @@ static Midi
     return midi;
 }
 
-static void
-(Midi_Free)
-(Midi* midi)
+static void Midi_Free(Midi* midi)
 {
     for(uint32_t number = 0; number < midi->track_count; number++)
         Track_Free(&midi->track[number]);
@@ -45,9 +41,7 @@ static void
     midi->track = NULL;
 }
 
-static bool
-(Midi_Done)
-(Midi* midi)
+static bool Midi_Done(Midi* midi)
 {
     uint32_t count = 0;
     for(uint32_t i = 0; i < midi->track_count; i++)
@@ -56,9 +50,7 @@ static bool
     return count == 0;
 }
 
-static uint32_t
-(Midi_ShaveTicks)
-(Midi* midi)
+static uint32_t Midi_ShaveTicks(Midi* midi)
 {
     uint32_t ticks = UINT32_MAX;
     for(uint32_t i = 0; i < midi->track_count; i++)
@@ -77,9 +69,7 @@ static uint32_t
     return ticks;
 }
 
-static uint32_t
-(Midi_ToMicrosecondDelay)
-(Midi* midi, TrackMeta* meta)
+static uint32_t Midi_ToMicrosecondDelay(Midi* midi, TrackMeta* meta)
 {
     const bool use_ticks = (midi->time_division & 0x8000) == 0;
     if(use_ticks)
@@ -95,9 +85,7 @@ static uint32_t
     }
 }
 
-static void
-(Midi_Play)
-(Midi* midi, Notes* notes, TrackMeta* meta)
+static void Midi_Play(Midi* midi, Notes* notes, TrackMeta* meta)
 {
     for(;;)
     {

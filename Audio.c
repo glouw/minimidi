@@ -16,9 +16,7 @@ typedef struct
 }
 AudioConsumer;
 
-static Audio
-(Audio_Init)
-(void)
+static Audio Audio_Init(void)
 {
     Audio audio = { 0 };
     audio.spec.freq = 44100;
@@ -30,16 +28,12 @@ static Audio
     return audio;
 }
 
-static void
-(Audio_Free)
-(Audio* audio)
+static void Audio_Free(Audio* audio)
 {
     SDL_CloseAudioDevice(audio->dev);
 }
 
-static int32_t
-(Audio_Play)
-(void* data)
+static int32_t Audio_Play(void* data)
 {
     AudioConsumer* consumer = data;
     uint32_t xor_last = 0x0;
@@ -57,22 +51,27 @@ static int32_t
             for(uint32_t sample = 0; sample < samples; sample += consumer->audio->spec.channels)
             {
                 int16_t mix = 0;
-                for(uint32_t id = 0; id < consumer->notes->size; id++)
+                for(uint32_t note_index = 0; note_index < NOTES_MAX; note_index++)
                 {
-                    Note* note = &consumer->notes->note[id];
-                    Note_Roll(note);
-                    Note_Clamp(note);
-                    const int32_t gain = SDL_AtomicGet(&note->gain);
-                    const bool audible = gain > 0;
-                    if(audible)
+                    for(uint8_t channel = 0; channel < NOTES_CHANNEL_MAX; channel++)
                     {
-                        const int32_t channel = SDL_AtomicGet(&note->channel);
-                        const Instrument instrument = SDL_AtomicGet(&consumer->meta->instruments[channel]);;
-                        mix += NOTE_WAVEFORMS[instrument](note, id, consumer->audio->spec.freq);
+                        Note* note = &consumer->notes->note[note_index][channel];
+                        if(SDL_AtomicGet(&note->on))
+                        {
+                            Note_Roll(note);
+                            Note_Clamp(note);
+                            const int32_t gain = SDL_AtomicGet(&note->gain);
+                            const bool audible = gain > 0;
+                            if(audible)
+                            {
+                                const uint8_t instrument = SDL_AtomicGet(&consumer->meta->instruments[channel]);
+                                mix += NOTE_WAVEFORMS[instrument](note, note_index, consumer->audio->spec.freq);
+                            }
+                        }
                     }
                 }
-                for(uint32_t channel = 0; channel < consumer->audio->spec.channels; channel++)
-                    mixes[sample + channel] = mix;
+                for(uint32_t speaker = 0; speaker < consumer->audio->spec.channels; speaker++)
+                    mixes[sample + speaker] = mix;
             }
             SDL_LockAudioDevice(consumer->audio->dev);
             SDL_QueueAudio(consumer->audio->dev, mixes, mixes_size);
@@ -80,16 +79,19 @@ static int32_t
             free(mixes);
         }
         uint32_t xor = 0x0;
-        for(uint32_t id = 0; id < consumer->notes->size; id++)
+        for(uint32_t note_index = 0; note_index < NOTES_MAX; note_index++)
         {
-            Note* note = &consumer->notes->note[id];
-            const int32_t gain = SDL_AtomicGet(&note->gain);
-            const bool audible = gain > 0;
-            if(audible)
-                xor ^= id;
+            for(uint8_t channel = 0; channel < NOTES_CHANNEL_MAX; channel++)
+            {
+                Note* note = &consumer->notes->note[note_index][channel];
+                const int32_t gain = SDL_AtomicGet(&note->gain);
+                const bool audible = gain > 0;
+                if(audible)
+                    xor ^= note_index;
+            }
         }
         if(xor != xor_last)
-            Notes_Draw(consumer->notes);
+            Notes_Draw(consumer->notes, consumer->meta);
         xor_last = xor;
         SDL_Delay(1);
     }
