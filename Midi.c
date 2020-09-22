@@ -69,7 +69,7 @@ static uint32_t Midi_ShaveTicks(Midi* midi)
     return ticks;
 }
 
-static uint32_t Midi_ToMicrosecondDelay(Midi* midi, TrackMeta* meta)
+static uint32_t Midi_ToMicrosecondDelay(Midi* midi, Meta* meta)
 {
     const bool use_ticks = (midi->time_division & 0x8000) == 0;
     if(use_ticks)
@@ -85,7 +85,7 @@ static uint32_t Midi_ToMicrosecondDelay(Midi* midi, TrackMeta* meta)
     }
 }
 
-static void Midi_Play(Midi* midi, Notes* notes, TrackMeta* meta)
+static void Midi_Play(Midi* midi, Notes* notes, Meta* meta)
 {
     for(;;)
     {

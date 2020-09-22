@@ -7,6 +7,7 @@
 
 #include "SDLite.c"
 #include "Error.c"
+#include "Meta.c"
 #include "Bytes.c"
 #include "Note.c"
 #include "Notes.c"
@@ -22,7 +23,7 @@ int main(const int argc, char** argv)
     Audio audio = Audio_Init();
     Bytes bytes = Bytes_FromFile(args.file);
     Notes notes = Notes_Init();
-    TrackMeta meta = { 0 };
+    Meta meta = { 0 };
     AudioConsumer consumer = { &audio, &notes, &meta };
     SDL_Thread* thread = SDL_CreateThread(Audio_Play, "MIDI CONSUMER", &consumer);
     do // PRODUCE.

@@ -1,7 +1,5 @@
 #pragma once
 
-#define TRACK_DRUM_CHANNEL (9)
-
 typedef struct
 {
     uint8_t* data;
@@ -99,7 +97,12 @@ static uint8_t Track_Status(Track* track, const uint8_t status)
     }
 }
 
-static void Track_RealEvent(Track* track, TrackMeta* meta, Notes* notes, const uint8_t leader)
+static bool Notes_IsPercussive(const uint8_t channel)
+{
+    return channel == 9;
+}
+
+static void Track_RealEvent(Track* track, Meta* meta, Notes* notes, const uint8_t leader)
 {
     const uint8_t channel = leader & 0xF;
     const uint8_t status = leader >> 4;
@@ -114,10 +117,11 @@ static void Track_RealEvent(Track* track, TrackMeta* meta, Notes* notes, const u
         {
             const uint8_t note_index = Track_U8(track);
             Track_U8(track);
-            if(channel != TRACK_DRUM_CHANNEL)
+            if(!Notes_IsPercussive(channel))
             {
                 Note* note = &notes->note[note_index][channel];
                 SDL_AtomicSet(&note->gain_setpoint, 0);
+                SDL_AtomicSet(&meta->bend[channel], META_BEND_DEFAULT);
             }
             break;
         }
@@ -125,11 +129,12 @@ static void Track_RealEvent(Track* track, TrackMeta* meta, Notes* notes, const u
         {
             const uint8_t note_index = Track_U8(track);
             const uint8_t note_velocity = Track_U8(track);
-            if(channel != TRACK_DRUM_CHANNEL)
+            if(!Notes_IsPercussive(channel))
             {
                 Note* note = &notes->note[note_index][channel];
-                SDL_AtomicSet(&note->gain_setpoint, NOTE_AMPLIFICATION * note_velocity);
+                SDL_AtomicSet(&note->gain_setpoint, META_NOTE_SUSTAIN * note_velocity);
                 SDL_AtomicSet(&note->on, true);
+                SDL_AtomicSet(&meta->bend[channel], META_BEND_DEFAULT);
             }
             break;
         }
@@ -147,13 +152,13 @@ static void Track_RealEvent(Track* track, TrackMeta* meta, Notes* notes, const u
             {
                 case 0x07: // CHANNEL VOLUME.
                 {
-                    for(uint32_t note_index = 0; note_index < NOTES_MAX; note_index++)
+                    for(uint32_t note_index = 0; note_index < META_NOTES_MAX; note_index++)
                     {
                         Note* note = &notes->note[note_index][channel];
                         const int32_t gain_setpoint = SDL_AtomicGet(&note->gain_setpoint);
                         const bool audible = gain_setpoint > 0;
                         if(audible)
-                            SDL_AtomicSet(&note->gain_setpoint, NOTE_AMPLIFICATION * value);
+                            SDL_AtomicSet(&note->gain_setpoint, META_NOTE_SUSTAIN * value);
                     }
                     break;
                 }
@@ -173,8 +178,10 @@ static void Track_RealEvent(Track* track, TrackMeta* meta, Notes* notes, const u
         }
         case 0xE: // PITCH BEND.
         {
-            Track_U8(track);
-            Track_U8(track);
+            const uint8_t lsb = Track_U8(track);
+            const uint8_t msb = Track_U8(track);
+            const uint16_t bend = (msb << 7) | lsb;
+            SDL_AtomicSet(&meta->bend[channel], bend);
             break;
         }
         case 0xF: // SYSEX START (CASIO).
@@ -186,7 +193,7 @@ static void Track_RealEvent(Track* track, TrackMeta* meta, Notes* notes, const u
     }
 }
 
-static void Track_MetaEvent(Track* track, TrackMeta* meta)
+static void Track_MetaEvent(Track* track, Meta* meta)
 {
     switch(Track_U8(track))
     {
@@ -212,9 +219,7 @@ static void Track_MetaEvent(Track* track, TrackMeta* meta)
         case 0x08: // PROGRAM NAME.
         case 0x09: // DEVICE NAME.
         {
-            char* const str = Track_Str(track);
-            puts(str);
-            free(str);
+            free(Track_Str(track));
             break;
         }
         case 0x20: // CHANNEL PREFIX.
@@ -280,7 +285,7 @@ static void Track_MetaEvent(Track* track, TrackMeta* meta)
     }
 }
 
-static void Track_Play(Track* track, Notes* notes, TrackMeta* meta)
+static void Track_Play(Track* track, Notes* notes, Meta* meta)
 {
     const int32_t end = -1;
     if(track->run)

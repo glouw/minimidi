@@ -1,82 +1,119 @@
 #pragma once
 
-#define NOTE_AMPLIFICATION (20)
-
 typedef struct
 {
     SDL_atomic_t gain;
     SDL_atomic_t gain_setpoint;
     SDL_atomic_t progress;
     SDL_atomic_t on;
+    float _freq_setpoint;
+    float _freq;
 }
 Note;
 
-static int16_t Note_Sin(Note* note, const uint32_t id, const uint32_t sample_freq)
+#define COPY(X) SDL_AtomicSet(&copy.X, SDL_AtomicGet(&note->X))
+static Note Note_Copy(Note* note)
 {
+    Note copy;
+    COPY(gain);
+    COPY(gain_setpoint);
+    COPY(progress);
+    COPY(on);
+    return copy;;
+}
+#undef COPY
+
+static float Note_Freq(const float id)
+{
+    return 440.0f * powf(2.0f, (id - 69.0f) / 12.0f);
+}
+
+static float Note_Tick(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
+{
+    const int32_t bend_steps = META_BEND_DEFAULT;
+    const int32_t bend = SDL_AtomicGet(&meta->bend[channel]);
+    const float bend_id = (bend - bend_steps) / (bend_steps / 12.0f); // XXX. CREATES DISTORTION.
     const int32_t progress = SDL_AtomicGet(&note->progress);
-    const float pi = 3.14159265358979323846f;
-    const float freq = 440.0f * powf(2.0f, (id - 69.0f) / 12.0f);
-    const float x = progress * (2 * pi) * freq / sample_freq;
+    const float freq = Note_Freq(id + bend_id);
+    const float x = progress * (2.0f * META_PI) * freq / sample_freq;
+    SDL_AtomicIncRef(&note->progress);
+    return x;
+}
+
+static int16_t Note_Sin(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
+{
+    const float x = Note_Tick(note, meta, channel, id, sample_freq);
     const int32_t gain = SDL_AtomicGet(&note->gain);
     const float wave = gain * sinf(x);
-    SDL_AtomicIncRef(&note->progress);
     return wave;
 }
 
-static int16_t Note_SinHalf(Note* note, const uint32_t id, const uint32_t sample_freq)
+static int16_t Note_Square(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
 {
-    const int16_t wave = Note_Sin(note, id, sample_freq);
-    return wave > 0 ? wave : 0;
+    const int16_t wave = Note_Sin(note, meta, channel,id, sample_freq);
+    const int32_t gain = SDL_AtomicGet(&note->gain);
+    return (wave >= 0 ? gain : -gain) / 10.0f;
 }
 
-static int16_t Note_SinAbs(Note* note, const uint32_t id, const uint32_t sample_freq)
+static int16_t Note_Triangle(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
 {
-    return abs(Note_Sin(note, id, sample_freq));
+    const float x = Note_Tick(note, meta, channel, id, sample_freq);
+    const int32_t gain = SDL_AtomicGet(&note->gain);
+    const float wave = gain * asinf(sinf(x)) / 1.5708f / 3.0f;
+    return wave;
 }
 
-static int16_t Note_SinQuarter(Note* note, const uint32_t id, const uint32_t sample_freq)
+static int16_t Note_TriangleHalf(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
 {
-    Note copy = *note;
-    SDL_AtomicDecRef(&copy.progress);
-    const int16_t a = Note_SinAbs(&copy, id, sample_freq);
-    const int16_t b = Note_SinAbs( note, id, sample_freq);
-    return b > a ? b : 0;
+    const int16_t wave = Note_Triangle(note, meta, channel, id, sample_freq);
+    return wave > 0 ? (2.0f * wave) : 0;
 }
 
-static int16_t (*NOTE_WAVEFORMS[])(Note* note, const uint32_t id, const uint32_t sample_freq) = {
-    [   0 ] = Note_SinHalf,
-    [   1 ] = Note_SinHalf,
-    [   2 ] = Note_SinHalf,
-    [   3 ] = Note_SinHalf,
-    [   4 ] = Note_SinHalf,
-    [   5 ] = Note_SinHalf,
-    [   6 ] = Note_SinHalf,
-    [   7 ] = Note_SinHalf,
-    [   8 ] = Note_SinHalf,
-    [   9 ] = Note_SinHalf,
-    [  10 ] = Note_SinHalf,
-    [  11 ] = Note_SinHalf,
-    [  12 ] = Note_SinHalf,
-    [  13 ] = Note_SinHalf,
-    [  14 ] = Note_SinHalf,
-    [  15 ] = Note_SinHalf,
-    [  16 ] = Note_SinHalf,
-    [  17 ] = Note_SinHalf,
-    [  18 ] = Note_SinHalf,
-    [  19 ] = Note_SinHalf,
-    [  20 ] = Note_SinHalf,
-    [  21 ] = Note_SinHalf,
-    [  22 ] = Note_SinHalf,
-    [  23 ] = Note_SinHalf,
+static int16_t Note_SinHalf(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
+{
+    const int16_t wave = Note_Sin(note, meta, channel, id, sample_freq);
+    return wave > 0 ? (2.0f * wave) : 0;
+}
+
+static int16_t (*NOTE_WAVEFORMS[])(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq) = {
+    // PIANO.
+    [   0 ] = Note_Triangle,
+    [   1 ] = Note_Triangle,
+    [   2 ] = Note_Triangle,
+    [   3 ] = Note_Triangle,
+    [   4 ] = Note_Triangle,
+    [   5 ] = Note_Triangle,
+    [   6 ] = Note_Triangle,
+    [   7 ] = Note_Triangle,
+    // CHROMATIC PERCUSSION.
+    [   8 ] = Note_Sin,
+    [   9 ] = Note_Sin,
+    [  10 ] = Note_Sin,
+    [  11 ] = Note_Sin,
+    [  12 ] = Note_Sin,
+    [  13 ] = Note_Sin,
+    [  14 ] = Note_Sin,
+    [  15 ] = Note_Sin,
+    // ORGAN.
+    [  16 ] = Note_Square,
+    [  17 ] = Note_Square,
+    [  18 ] = Note_Square,
+    [  19 ] = Note_Square,
+    [  20 ] = Note_Square,
+    [  21 ] = Note_Square,
+    [  22 ] = Note_Square,
+    [  23 ] = Note_Square,
+    // GUITAR.
     [  24 ] = Note_SinHalf,
     [  25 ] = Note_SinHalf,
-    [  26 ] = Note_SinHalf,
+    [  26 ] = Note_Square,
     [  27 ] = Note_SinHalf,
     [  28 ] = Note_SinHalf,
     [  29 ] = Note_SinHalf,
     [  30 ] = Note_SinHalf,
     [  31 ] = Note_SinHalf,
-    [  32 ] = Note_SinHalf,
+    // BASS.
+    [  32 ] = Note_TriangleHalf,
     [  33 ] = Note_SinHalf,
     [  34 ] = Note_SinHalf,
     [  35 ] = Note_SinHalf,
@@ -84,100 +121,111 @@ static int16_t (*NOTE_WAVEFORMS[])(Note* note, const uint32_t id, const uint32_t
     [  37 ] = Note_SinHalf,
     [  38 ] = Note_SinHalf,
     [  39 ] = Note_SinHalf,
-    [  40 ] = Note_SinHalf,
-    [  41 ] = Note_SinHalf,
-    [  42 ] = Note_SinHalf,
-    [  43 ] = Note_SinHalf,
-    [  44 ] = Note_SinHalf,
-    [  45 ] = Note_SinHalf,
-    [  46 ] = Note_SinHalf,
-    [  47 ] = Note_SinHalf,
-    [  48 ] = Note_SinHalf,
-    [  49 ] = Note_SinHalf,
-    [  50 ] = Note_SinHalf,
-    [  51 ] = Note_SinHalf,
-    [  52 ] = Note_SinHalf,
-    [  53 ] = Note_SinHalf,
-    [  54 ] = Note_SinHalf,
-    [  55 ] = Note_SinHalf,
-    [  56 ] = Note_SinHalf,
-    [  57 ] = Note_SinHalf,
-    [  58 ] = Note_SinHalf,
-    [  59 ] = Note_SinHalf,
-    [  60 ] = Note_SinHalf,
-    [  61 ] = Note_SinHalf,
-    [  62 ] = Note_SinHalf,
-    [  63 ] = Note_SinHalf,
-    [  64 ] = Note_SinHalf,
-    [  65 ] = Note_SinHalf,
-    [  66 ] = Note_SinHalf,
-    [  67 ] = Note_SinHalf,
-    [  68 ] = Note_SinHalf,
-    [  69 ] = Note_SinHalf,
-    [  70 ] = Note_SinHalf,
-    [  71 ] = Note_SinHalf,
-    [  72 ] = Note_SinHalf,
-    [  73 ] = Note_SinHalf,
-    [  74 ] = Note_SinHalf,
-    [  75 ] = Note_SinHalf,
-    [  76 ] = Note_SinHalf,
-    [  77 ] = Note_SinHalf,
-    [  78 ] = Note_SinHalf,
-    [  79 ] = Note_SinHalf,
-    [  80 ] = Note_SinHalf,
-    [  81 ] = Note_SinHalf,
-    [  82 ] = Note_SinHalf,
-    [  83 ] = Note_SinHalf,
-    [  84 ] = Note_SinHalf,
-    [  85 ] = Note_SinHalf,
-    [  86 ] = Note_SinHalf,
-    [  87 ] = Note_SinHalf,
-    [  88 ] = Note_SinHalf,
-    [  89 ] = Note_SinHalf,
-    [  90 ] = Note_SinHalf,
-    [  91 ] = Note_SinHalf,
-    [  92 ] = Note_SinHalf,
-    [  93 ] = Note_SinHalf,
-    [  94 ] = Note_SinHalf,
-    [  95 ] = Note_SinHalf,
-    [  96 ] = Note_SinHalf,
-    [  97 ] = Note_SinHalf,
-    [  98 ] = Note_SinHalf,
-    [  99 ] = Note_SinHalf,
-    [ 100 ] = Note_SinHalf,
-    [ 101 ] = Note_SinHalf,
-    [ 102 ] = Note_SinHalf,
-    [ 103 ] = Note_SinHalf,
-    [ 104 ] = Note_SinHalf,
-    [ 105 ] = Note_SinHalf,
-    [ 106 ] = Note_SinHalf,
-    [ 107 ] = Note_SinHalf,
-    [ 108 ] = Note_SinHalf,
-    [ 109 ] = Note_SinHalf,
-    [ 110 ] = Note_SinHalf,
-    [ 111 ] = Note_SinHalf,
-    [ 112 ] = Note_SinHalf,
-    [ 113 ] = Note_SinHalf,
-    [ 114 ] = Note_SinHalf,
-    [ 115 ] = Note_SinHalf,
-    [ 116 ] = Note_SinHalf,
-    [ 117 ] = Note_SinHalf,
-    [ 118 ] = Note_SinHalf,
-    [ 119 ] = Note_SinHalf,
-    [ 120 ] = Note_SinHalf,
-    [ 121 ] = Note_SinHalf,
-    [ 122 ] = Note_SinHalf,
-    [ 123 ] = Note_SinHalf,
-    [ 124 ] = Note_SinHalf,
-    [ 125 ] = Note_SinHalf,
-    [ 126 ] = Note_SinHalf,
-    [ 127 ] = Note_SinHalf,
+    // STRINGS.
+    [  40 ] = Note_Triangle,
+    [  41 ] = Note_Triangle,
+    [  42 ] = Note_Triangle,
+    [  43 ] = Note_Triangle,
+    [  44 ] = Note_Triangle,
+    [  45 ] = Note_Triangle,
+    [  46 ] = Note_Triangle,
+    [  47 ] = Note_Triangle,
+    // STRINGS (MORE).
+    [  48 ] = Note_Triangle,
+    [  49 ] = Note_Triangle,
+    [  50 ] = Note_Triangle,
+    [  51 ] = Note_Triangle,
+    [  52 ] = Note_Triangle,
+    [  53 ] = Note_Triangle,
+    [  54 ] = Note_Triangle,
+    [  55 ] = Note_Triangle,
+    // BRASS.
+    [  56 ] = Note_Sin,
+    [  57 ] = Note_Sin,
+    [  58 ] = Note_Sin,
+    [  59 ] = Note_Sin,
+    [  60 ] = Note_Sin,
+    [  61 ] = Note_Sin,
+    [  62 ] = Note_Sin,
+    [  63 ] = Note_Sin,
+    // REED.
+    [  64 ] = Note_Square,
+    [  65 ] = Note_Square,
+    [  66 ] = Note_Square,
+    [  67 ] = Note_Square,
+    [  68 ] = Note_Square,
+    [  69 ] = Note_Square,
+    [  70 ] = Note_Square,
+    [  71 ] = Note_Square,
+    // PIPE.
+    [  72 ] = Note_Square,
+    [  73 ] = Note_Sin,
+    [  74 ] = Note_Square,
+    [  75 ] = Note_Square,
+    [  76 ] = Note_Square,
+    [  77 ] = Note_Square,
+    [  78 ] = Note_Square,
+    [  79 ] = Note_Square,
+    // SYNTH LEAD.
+    [  80 ] = Note_Sin,
+    [  81 ] = Note_Sin,
+    [  82 ] = Note_Triangle,
+    [  83 ] = Note_Sin,
+    [  84 ] = Note_Sin,
+    [  85 ] = Note_Sin,
+    [  86 ] = Note_Sin,
+    [  87 ] = Note_Sin,
+    // SYNTH PAD.
+    [  88 ] = Note_Sin,
+    [  89 ] = Note_Sin,
+    [  90 ] = Note_Sin,
+    [  91 ] = Note_Sin,
+    [  92 ] = Note_Sin,
+    [  93 ] = Note_Sin,
+    [  94 ] = Note_Sin,
+    [  95 ] = Note_Sin,
+    // SYNTH EFFECTS.
+    [  96 ] = Note_Sin,
+    [  97 ] = Note_Sin,
+    [  98 ] = Note_Sin,
+    [  99 ] = Note_Sin,
+    [ 100 ] = Note_Sin,
+    [ 101 ] = Note_Sin,
+    [ 102 ] = Note_Sin,
+    [ 103 ] = Note_Sin,
+    // ETHNIC.
+    [ 104 ] = Note_Sin,
+    [ 105 ] = Note_Sin,
+    [ 106 ] = Note_Sin,
+    [ 107 ] = Note_Sin,
+    [ 108 ] = Note_Sin,
+    [ 109 ] = Note_Sin,
+    [ 110 ] = Note_Sin,
+    [ 111 ] = Note_Sin,
+    // PERCUSSIVE.
+    [ 112 ] = Note_Sin,
+    [ 113 ] = Note_Sin,
+    [ 114 ] = Note_Sin,
+    [ 115 ] = Note_Sin,
+    [ 116 ] = Note_Sin,
+    [ 117 ] = Note_Sin,
+    [ 118 ] = Note_Sin,
+    [ 119 ] = Note_Sin,
+    // SOUND EFFECTS.
+    [ 120 ] = Note_Sin,
+    [ 121 ] = Note_Sin,
+    [ 122 ] = Note_Sin,
+    [ 123 ] = Note_Sin,
+    [ 124 ] = Note_Sin,
+    [ 125 ] = Note_Sin,
+    [ 126 ] = Note_Sin,
+    [ 127 ] = Note_Sin,
 };
 
 static void Note_Clamp(Note* note)
 {
     const int32_t min = 0;
-    const int32_t max = NOTE_AMPLIFICATION * 127;
+    const int32_t max = META_NOTE_SUSTAIN * 127;
     const int32_t gain = SDL_AtomicGet(&note->gain);
     if(gain < min) SDL_AtomicSet(&note->gain, min);
     if(gain > max) SDL_AtomicSet(&note->gain, max);

@@ -1,5 +1,4 @@
-CFLAGS  = -Wall -Wextra -Wpedantic -std=gnu99 -lm -lSDL2
-CFLAGS += -g -O0 -march=native
+CFLAGS = -Ofast -Wall -Wextra -Wpedantic -std=c99 -lm -lSDL2
 
 CC = gcc
 
