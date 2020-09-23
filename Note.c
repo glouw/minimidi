@@ -6,22 +6,8 @@ typedef struct
     SDL_atomic_t gain_setpoint;
     SDL_atomic_t progress;
     SDL_atomic_t on;
-    float _freq_setpoint;
-    float _freq;
 }
 Note;
-
-#define COPY(X) SDL_AtomicSet(&copy.X, SDL_AtomicGet(&note->X))
-static Note Note_Copy(Note* note)
-{
-    Note copy;
-    COPY(gain);
-    COPY(gain_setpoint);
-    COPY(progress);
-    COPY(on);
-    return copy;;
-}
-#undef COPY
 
 static float Note_Freq(const float id)
 {
@@ -73,6 +59,42 @@ static int16_t Note_SinHalf(Note* note, Meta* meta, const uint8_t channel, const
 {
     const int16_t wave = Note_Sin(note, meta, channel, id, sample_freq);
     return wave > 0 ? (2.0f * wave) : 0;
+}
+
+static void Note_Clamp(Note* note)
+{
+    const int32_t min = 0;
+    const int32_t max = META_NOTE_SUSTAIN * 127;
+    const int32_t gain = SDL_AtomicGet(&note->gain);
+    if(gain < min) SDL_AtomicSet(&note->gain, min);
+    if(gain > max) SDL_AtomicSet(&note->gain, max);
+}
+
+static void Note_Roll(Note* note)
+{
+    const int32_t gain = SDL_AtomicGet(&note->gain);
+    const int32_t gain_setpoint = SDL_AtomicGet(&note->gain_setpoint);
+    const int32_t diff = gain_setpoint - gain;
+    const int32_t decay = 200;
+    if(diff == 0)
+    {
+        if(gain == 0)
+            SDL_AtomicSet(&note->on, false);
+        else // NOTE DECAY WHEN HELD.
+        {
+            const int32_t progress = SDL_AtomicGet(&note->progress);
+            if(progress != 0 && (progress % decay == 0))
+            {
+                SDL_AtomicDecRef(&note->gain);
+                SDL_AtomicDecRef(&note->gain_setpoint);
+            }
+        }
+    }
+    else // NOTE DELTA RAMP - PREVENTS CLICKS AND POPS.
+    {
+        const int32_t step = diff / abs(diff);
+        SDL_AtomicAdd(&note->gain, step);
+    }
 }
 
 static int16_t (*NOTE_WAVEFORMS[])(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq) = {
@@ -221,39 +243,3 @@ static int16_t (*NOTE_WAVEFORMS[])(Note* note, Meta* meta, const uint8_t channel
     [ 126 ] = Note_Sin,
     [ 127 ] = Note_Sin,
 };
-
-static void Note_Clamp(Note* note)
-{
-    const int32_t min = 0;
-    const int32_t max = META_NOTE_SUSTAIN * 127;
-    const int32_t gain = SDL_AtomicGet(&note->gain);
-    if(gain < min) SDL_AtomicSet(&note->gain, min);
-    if(gain > max) SDL_AtomicSet(&note->gain, max);
-}
-
-static void Note_Roll(Note* note)
-{
-    const int32_t gain = SDL_AtomicGet(&note->gain);
-    const int32_t gain_setpoint = SDL_AtomicGet(&note->gain_setpoint);
-    const int32_t diff = gain_setpoint - gain;
-    const int32_t decay = 200;
-    if(diff == 0)
-    {
-        if(gain == 0)
-            SDL_AtomicSet(&note->on, false);
-        else // NOTE DECAY WHEN HELD.
-        {
-            const int32_t progress = SDL_AtomicGet(&note->progress);
-            if(progress != 0 && (progress % decay == 0))
-            {
-                SDL_AtomicDecRef(&note->gain);
-                SDL_AtomicDecRef(&note->gain_setpoint);
-            }
-        }
-    }
-    else // NOTE DELTA RAMP - PREVENTS CLICKS AND POPS.
-    {
-        const int32_t step = diff / abs(diff);
-        SDL_AtomicAdd(&note->gain, step);
-    }
-}
