@@ -6,6 +6,10 @@ typedef struct
     SDL_atomic_t gain_setpoint;
     SDL_atomic_t progress;
     SDL_atomic_t on;
+    int32_t _bend_last;
+    float _id;
+    bool _wait;
+    bool _was_init;
 }
 Note;
 
@@ -14,14 +18,45 @@ static float Note_Freq(const float id)
     return 440.0f * powf(2.0f, (id - 69.0f) / 12.0f);
 }
 
+static float Note_X(const float progress, const float freq, const float sample_freq)
+{
+    return (progress * (2.0f * META_PI) * freq) / sample_freq;
+}
+
 static float Note_Tick(Note* note, Meta* meta, const uint8_t channel, const uint32_t id, const uint32_t sample_freq)
 {
-    const int32_t bend_steps = META_BEND_DEFAULT;
     const int32_t bend = SDL_AtomicGet(&meta->bend[channel]);
-    const float bend_id = (bend - bend_steps) / (bend_steps / 12.0f); // XXX. CREATES DISTORTION.
+    if(!note->_was_init)
+    {
+        note->_was_init = true;
+        note->_id = id;
+    }
+    if(bend != note->_bend_last)
+    {
+        note->_bend_last = bend;
+        note->_wait = true;
+    }
+    if(note->_wait)
+    {
+        const int32_t progress = SDL_AtomicGet(&note->progress);
+        const float freq = Note_Freq(note->_id);
+        const float x0 = Note_X(progress - 0.2f, freq, sample_freq);
+        const float x1 = Note_X(progress + 0.0f, freq, sample_freq);
+        const int32_t gain = SDL_AtomicGet(&note->gain);
+        const float a = gain * sinf(x0);
+        const float b = gain * sinf(x1);
+        const bool crossed = a < 0.0f && b > 0.0f;
+        if(crossed) // NOTE FREQUENCY CAN ONLY BE CHANGED AT X AXIS CROSSING.
+        {
+            const float bend_id = (bend - META_BEND_DEFAULT) / (META_BEND_DEFAULT / 12.0f);
+            note->_id = bend_id + id;
+            note->_wait = false;
+            SDL_AtomicSet(&note->progress, 0);
+        }
+    }
     const int32_t progress = SDL_AtomicGet(&note->progress);
-    const float freq = Note_Freq(id + bend_id);
-    const float x = progress * (2.0f * META_PI) * freq / sample_freq;
+    const float freq = Note_Freq(note->_id);
+    const float x = Note_X(progress, freq, sample_freq);
     SDL_AtomicIncRef(&note->progress);
     return x;
 }
@@ -79,7 +114,10 @@ static void Note_Roll(Note* note)
     if(diff == 0)
     {
         if(gain == 0)
+        {
+            note->_was_init = false;
             SDL_AtomicSet(&note->on, false);
+        }
         else // NOTE DECAY WHEN HELD.
         {
             const int32_t progress = SDL_AtomicGet(&note->progress);
