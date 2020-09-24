@@ -53,12 +53,12 @@ static void Notes_Draw(Notes* notes, Meta* meta)
                 if(draw)
                 {
                     const uint8_t instrument = SDL_AtomicGet(&meta->instruments[channel]);
-                    printf("%3X:%3X:%1X", instrument, gain, channel);
+                    printf("%4d:%3X:%1X", instrument, gain, channel);
                     got += 1;
                 }
             }
             for(int i = 0; i < draw_per_channel - got; i++)
-                printf("%9s", "");
+                printf("%10s", "");
             note_index += 1;
         }
         putchar('\n');

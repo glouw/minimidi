@@ -122,7 +122,7 @@ static int16_t (*WAVE_WAVEFORMS[])(Wave* wave) = {
     // GUITAR.
     [  24 ] = Wave_SinHalf,
     [  25 ] = Wave_SinHalf,
-    [  26 ] = Wave_Square,
+    [  26 ] = Wave_Square, // GOOD.
     [  27 ] = Wave_SinHalf,
     [  28 ] = Wave_SinHalf,
     [  29 ] = Wave_SinHalf,
@@ -130,7 +130,7 @@ static int16_t (*WAVE_WAVEFORMS[])(Wave* wave) = {
     [  31 ] = Wave_SinHalf,
     // BASS.
     [  32 ] = Wave_TriangleHalf,
-    [  33 ] = Wave_SinHalf,
+    [  33 ] = Wave_SinHalf, // GOOD
     [  34 ] = Wave_SinHalf,
     [  35 ] = Wave_SinHalf,
     [  36 ] = Wave_SinHalf,
@@ -145,25 +145,25 @@ static int16_t (*WAVE_WAVEFORMS[])(Wave* wave) = {
     [  44 ] = Wave_Triangle,
     [  45 ] = Wave_Triangle,
     [  46 ] = Wave_Triangle,
-    [  47 ] = Wave_Triangle,
+    [  47 ] = Wave_SinHalf,
     // STRINGS (MORE).
-    [  48 ] = Wave_Triangle,
+    [  48 ] = Wave_Triangle, // GOOD.
     [  49 ] = Wave_Triangle,
-    [  50 ] = Wave_Triangle,
+    [  50 ] = Wave_TriangleHalf,
     [  51 ] = Wave_Triangle,
     [  52 ] = Wave_Triangle,
     [  53 ] = Wave_Triangle,
     [  54 ] = Wave_Triangle,
     [  55 ] = Wave_Triangle,
     // BRASS.
-    [  56 ] = Wave_Sin,
-    [  57 ] = Wave_Sin,
-    [  58 ] = Wave_Sin,
-    [  59 ] = Wave_Sin,
-    [  60 ] = Wave_Sin,
-    [  61 ] = Wave_Sin,
-    [  62 ] = Wave_Sin,
-    [  63 ] = Wave_Sin,
+    [  56 ] = Wave_TriangleHalf,
+    [  57 ] = Wave_TriangleHalf,
+    [  58 ] = Wave_TriangleHalf,
+    [  59 ] = Wave_TriangleHalf,
+    [  60 ] = Wave_TriangleHalf,
+    [  61 ] = Wave_TriangleHalf,
+    [  62 ] = Wave_TriangleHalf,
+    [  63 ] = Wave_TriangleHalf,
     // REED.
     [  64 ] = Wave_Square,
     [  65 ] = Wave_Square,
@@ -174,14 +174,14 @@ static int16_t (*WAVE_WAVEFORMS[])(Wave* wave) = {
     [  70 ] = Wave_Square,
     [  71 ] = Wave_Square,
     // PIPE.
-    [  72 ] = Wave_Square,
-    [  73 ] = Wave_Sin,
-    [  74 ] = Wave_Square,
-    [  75 ] = Wave_Square,
-    [  76 ] = Wave_Square,
-    [  77 ] = Wave_Square,
-    [  78 ] = Wave_Square,
-    [  79 ] = Wave_Square,
+    [  72 ] = Wave_Sin,
+    [  73 ] = Wave_Sin, // GOOD.
+    [  74 ] = Wave_Sin,
+    [  75 ] = Wave_Sin,
+    [  76 ] = Wave_Sin,
+    [  77 ] = Wave_Sin,
+    [  78 ] = Wave_Sin,
+    [  79 ] = Wave_Sin,
     // SYNTH LEAD.
     [  80 ] = Wave_Sin,
     [  81 ] = Wave_Sin,
