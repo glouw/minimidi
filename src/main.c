@@ -11,6 +11,7 @@
 #include "Bytes.c"
 #include "Note.c"
 #include "Notes.c"
+#include "Wave.c"
 #include "Args.c"
 #include "Track.c"
 #include "Audio.c"

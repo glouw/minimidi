@@ -64,7 +64,8 @@ static int32_t Audio_Play(void* data)
                             if(audible)
                             {
                                 const uint8_t instrument = SDL_AtomicGet(&consumer->meta->instruments[channel]);
-                                mix += NOTE_WAVEFORMS[instrument](note, consumer->meta, channel, note_index, consumer->audio->spec.freq);
+                                Wave wave = { note, consumer->meta, channel, note_index, consumer->audio->spec.freq };
+                                mix += WAVE_WAVEFORMS[instrument](&wave);
                             }
                         }
                     }
