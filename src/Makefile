@@ -2,7 +2,7 @@ CFLAGS = -O2 -Wall -Wextra -Wpedantic -std=c99 -lm -lSDL2
 
 CC = gcc
 
-BIN = minimidi
+BIN = ../minimidi
 
 SRC = main.c
 
