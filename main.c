@@ -44,7 +44,6 @@ typedef struct
     int gain_setpoint;
     int progress;
     int on;
-    // PRIVATE.
     int32_t bend_last;
     float id;
     bool wait;
@@ -117,7 +116,8 @@ typedef struct
 }
 Midi;
 
-static Bytes Bytes_FromFile(FILE* file)
+static Bytes
+Bytes_FromFile(FILE* file)
 {
     fseek(file, 0, SEEK_END);
     const uint32_t size = ftell(file);
@@ -130,29 +130,34 @@ static Bytes Bytes_FromFile(FILE* file)
     return bytes;
 }
 
-static void Bytes_Free(Bytes* bytes)
+static void
+Bytes_Free(Bytes* bytes)
 {
     free(bytes->data);
     bytes->data = NULL;
     bytes->size = 0;
 }
 
-static uint8_t Bytes_U8(Bytes* bytes, const uint32_t index)
+static uint8_t
+Bytes_U8(Bytes* bytes, const uint32_t index)
 {
     return bytes->data[index];
 }
 
-static uint16_t Bytes_U16(Bytes* bytes, const uint32_t index)
+static uint16_t
+Bytes_U16(Bytes* bytes, const uint32_t index)
 {
     return Bytes_U8(bytes, index + 0) << 8 | Bytes_U8(bytes, index + 1);
 }
 
-static uint32_t Bytes_U32(Bytes* bytes, const uint32_t index)
+static uint32_t
+Bytes_U32(Bytes* bytes, const uint32_t index)
 {
     return Bytes_U16(bytes, index + 0) << 16 | Bytes_U16(bytes, index + 2);
 }
 
-static void Note_Clamp(Note* note)
+static void
+Note_Clamp(Note* note)
 {
     const int32_t min = 0;
     const int32_t max = CONST_NOTE_SUSTAIN * 127;
@@ -160,7 +165,8 @@ static void Note_Clamp(Note* note)
     if(note->gain > max) note->gain = max;
 }
 
-static void Note_Roll(Note* note)
+static void
+Note_Roll(Note* note)
 {
     const int32_t diff = note->gain_setpoint - note->gain;
     const int32_t decay = 200;
@@ -187,7 +193,8 @@ static void Note_Roll(Note* note)
     }
 }
 
-static Notes Notes_Init(void)
+static Notes
+Notes_Init(void)
 {
     Notes notes = { 0 };
     notes.display_rows = 32;
@@ -195,14 +202,16 @@ static Notes Notes_Init(void)
     return notes;
 }
 
-static void Notes_Free(Notes* notes)
+static void
+Notes_Free(Notes* notes)
 {
     // PATCH UP DISPLAY FROM CLIPPING WITH PROMPT AT EXIT.
     for(uint32_t i = 0; i < notes->display_rows; i++)
         putchar('\n');
 }
 
-static void Notes_Draw(Notes* notes, Meta* meta)
+static void
+Notes_Draw(Notes* notes, Meta* meta)
 {
     const char* const grn = "\x1b[0;32m";
     const char* const red = "\x1b[0;31m";
@@ -246,19 +255,22 @@ static void Notes_Draw(Notes* notes, Meta* meta)
     printf(nrm);
 }
 
-static float Note_Freq(Note* note)
+static float
+Note_Freq(Note* note)
 {
     return 440.0f * powf(2.0f, (note->id - 69.0f) / 12.0f);
 }
 
-static float Wave_X(Wave* wave, const float progress)
+static float
+Wave_X(Wave* wave, const float progress)
 {
     const float freq = Note_Freq(wave->note);
     const float pi = 3.14159265358979323846f;
     return (progress * (2.0f * pi) * freq) / wave->sample_freq;
 }
 
-static float Wave_Tick(Wave* wave)
+static float
+Wave_Tick(Wave* wave)
 {
     const int32_t bend = wave->meta->bend[wave->channel];
     if(!wave->note->was_init)
@@ -292,37 +304,43 @@ static float Wave_Tick(Wave* wave)
     return x;
 }
 
-static int16_t Wave_Sin(Wave* wave)
+static int16_t
+Wave_Sin(Wave* wave)
 {
     const float x = Wave_Tick(wave);
     return wave->note->gain * sinf(x);
 }
 
-static int16_t Wave_Square(Wave* wave)
+static int16_t
+Wave_Square(Wave* wave)
 {
     const int16_t amp = Wave_Sin(wave);
     return (amp >= 0 ? wave->note->gain : -wave->note->gain) / 10;
 }
 
-static int16_t Wave_Triangle(Wave* wave)
+static int16_t
+Wave_Triangle(Wave* wave)
 {
     const float x = Wave_Tick(wave);
     return wave->note->gain * asinf(sinf(x)) / 1.5708f / 3;
 }
 
-static int16_t Wave_TriangleHalf(Wave* wave)
+static int16_t
+Wave_TriangleHalf(Wave* wave)
 {
     const int16_t amp = Wave_Triangle(wave);
     return amp > 0 ? (2.0f * amp) : 0;
 }
 
-static int16_t Wave_SinHalf(Wave* wave)
+static int16_t
+Wave_SinHalf(Wave* wave)
 {
     const int16_t amp = Wave_Sin(wave);
     return amp > 0 ? (1.2f * amp) : 0;
 }
 
-static int16_t (*WAVE_WAVEFORMS[])(Wave* wave) = {
+static int16_t
+(*WAVE_WAVEFORMS[])(Wave* wave) = {
     // PIANO.
     [   0 ] = Wave_Triangle,
     [   1 ] = Wave_Triangle,
@@ -469,7 +487,8 @@ static int16_t (*WAVE_WAVEFORMS[])(Wave* wave) = {
     [ 127 ] = Wave_Sin,
 };
 
-static Args Args_Init(const int argc, char** argv)
+static Args
+Args_Init(const int argc, char** argv)
 {
     Args args = { 0 };
     args.loop = false;
@@ -488,35 +507,41 @@ static Args Args_Init(const int argc, char** argv)
     return args;
 }
 
-static void Args_Free(Args* args)
+static void
+Args_Free(Args* args)
 {
     fclose(args->file);
 }
 
-static void Track_Free(Track* track)
+static void
+Track_Free(Track* track)
 {
     free(track->data);
     track->data = NULL;
 }
 
-static void Track_Back(Track* track)
+static void
+Track_Back(Track* track)
 {
     track->index -= 1;
 }
 
-static void Track_Next(Track* track)
+static void
+Track_Next(Track* track)
 {
     track->index += 1;
 }
 
-static uint8_t Track_U8(Track* track)
+static uint8_t
+Track_U8(Track* track)
 {
     const uint8_t byte = track->data[track->index];
     Track_Next(track);
     return byte;
 }
 
-static uint32_t Track_Var(Track* track)
+static uint32_t
+Track_Var(Track* track)
 {
     uint32_t var = 0x0;
     bool run = true;
@@ -529,7 +554,8 @@ static uint32_t Track_Var(Track* track)
     return var;
 }
 
-static char* Track_Str(Track* track)
+static char*
+Track_Str(Track* track)
 {
     const uint32_t len = Track_U8(track);
     char* const str = calloc(len + 1, sizeof(*str));
@@ -538,7 +564,8 @@ static char* Track_Str(Track* track)
     return str;
 }
 
-static Bytes Track_Bytes(Track* track)
+static Bytes
+Track_Bytes(Track* track)
 {
     Bytes bytes = { 0 };
     bytes.size = Track_Var(track);
@@ -548,7 +575,8 @@ static Bytes Track_Bytes(Track* track)
     return bytes;
 }
 
-static void Track_Crash(Track* track)
+static void
+Track_Crash(Track* track)
 {
     const int32_t window = 30;
     for(int32_t i = -window; i < window; i++)
@@ -563,7 +591,8 @@ static void Track_Crash(Track* track)
     exit(ERROR_CRASH);
 }
 
-static uint8_t Track_Status(Track* track, const uint8_t status)
+static uint8_t
+Track_Status(Track* track, const uint8_t status)
 {
     if(status >> 3)
     {
@@ -577,12 +606,14 @@ static uint8_t Track_Status(Track* track, const uint8_t status)
     }
 }
 
-static bool Notes_IsPercussive(const uint8_t channel)
+static bool
+Notes_IsPercussive(const uint8_t channel)
 {
     return channel == 9;
 }
 
-static void Track_RealEvent(Track* track, Meta* meta, Notes* notes, const uint8_t leader)
+static void
+Track_RealEvent(Track* track, Meta* meta, Notes* notes, const uint8_t leader)
 {
     const uint8_t channel = leader & 0xF;
     const uint8_t status = leader >> 4;
@@ -672,7 +703,8 @@ static void Track_RealEvent(Track* track, Meta* meta, Notes* notes, const uint8_
     }
 }
 
-static void Track_MetaEvent(Track* track, Meta* meta)
+static void
+Track_MetaEvent(Track* track, Meta* meta)
 {
     switch(Track_U8(track))
     {
@@ -764,7 +796,8 @@ static void Track_MetaEvent(Track* track, Meta* meta)
     }
 }
 
-static void Track_Play(Track* track, Notes* notes, Meta* meta)
+static void
+Track_Play(Track* track, Notes* notes, Meta* meta)
 {
     const int32_t end = -1;
     if(track->run)
@@ -786,7 +819,8 @@ static void Track_Play(Track* track, Notes* notes, Meta* meta)
     }
 }
 
-static Track Track_Init(Bytes* bytes, const uint32_t offset, const uint32_t number)
+static Track
+Track_Init(Bytes* bytes, const uint32_t offset, const uint32_t number)
 {
     Track track = { 0 };
     track.id = Bytes_U32(bytes, offset);
@@ -799,7 +833,8 @@ static Track Track_Init(Bytes* bytes, const uint32_t offset, const uint32_t numb
     return track;
 }
 
-static Audio Audio_Init(void)
+static Audio
+Audio_Init(void)
 {
     Audio audio = { 0 };
     audio.spec.freq = 44100;
@@ -811,12 +846,14 @@ static Audio Audio_Init(void)
     return audio;
 }
 
-static void Audio_Free(Audio* audio)
+static void
+Audio_Free(Audio* audio)
 {
     SDL_CloseAudioDevice(audio->dev);
 }
 
-static int32_t Audio_Play(void* data)
+static int32_t
+Audio_Play(void* data)
 {
     const float amplification = 4;
     AudioConsumer* consumer = data;
@@ -869,7 +906,8 @@ static int32_t Audio_Play(void* data)
     return 0;
 }
 
-static Midi Midi_Init(Bytes* bytes)
+static Midi
+Midi_Init(Bytes* bytes)
 {
     Midi midi = { 0 };
     midi.id = Bytes_U32(bytes, 0);
@@ -891,7 +929,8 @@ static Midi Midi_Init(Bytes* bytes)
     return midi;
 }
 
-static void Midi_Free(Midi* midi)
+static void
+Midi_Free(Midi* midi)
 {
     for(uint32_t number = 0; number < midi->track_count; number++)
         Track_Free(&midi->track[number]);
@@ -899,7 +938,8 @@ static void Midi_Free(Midi* midi)
     midi->track = NULL;
 }
 
-static bool Midi_Done(Midi* midi)
+static bool
+Midi_Done(Midi* midi)
 {
     uint32_t count = 0;
     for(uint32_t i = 0; i < midi->track_count; i++)
@@ -908,7 +948,8 @@ static bool Midi_Done(Midi* midi)
     return count == 0;
 }
 
-static uint32_t Midi_ShaveTicks(Midi* midi)
+static uint32_t
+Midi_ShaveTicks(Midi* midi)
 {
     uint32_t ticks = UINT32_MAX;
     for(uint32_t i = 0; i < midi->track_count; i++)
@@ -927,7 +968,8 @@ static uint32_t Midi_ShaveTicks(Midi* midi)
     return ticks;
 }
 
-static uint32_t Midi_ToMicrosecondDelay(Midi* midi, Meta* meta)
+static uint32_t
+Midi_ToMicrosecondDelay(Midi* midi, Meta* meta)
 {
     const bool use_ticks = (midi->time_division & 0x8000) == 0;
     if(use_ticks)
@@ -943,7 +985,8 @@ static uint32_t Midi_ToMicrosecondDelay(Midi* midi, Meta* meta)
     }
 }
 
-static void Midi_Play(Midi* midi, Notes* notes, Meta* meta)
+static void
+Midi_Play(Midi* midi, Notes* notes, Meta* meta)
 {
     for(;;)
     {
@@ -957,7 +1000,8 @@ static void Midi_Play(Midi* midi, Notes* notes, Meta* meta)
     }
 }
 
-int main(const int argc, char** argv)
+int
+main(const int argc, char** argv)
 {
     SDL_Init(SDL_INIT_AUDIO);
     Args args = Args_Init(argc, argv);
