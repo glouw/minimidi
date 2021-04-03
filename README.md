@@ -2,8 +2,6 @@
 
 Minimidi plays midi files to the tune of Gameboy and NES hardware.
 
-![](image/screen.png)
-
 ## Libs
 
     pacman -S sdl2
