@@ -8,7 +8,7 @@ Minimidi plays midi files to the tune of Gameboy and NES hardware.
 
 ## Building
 
-    make -C src
+    make
 
 ## Usage
 
