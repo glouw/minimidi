@@ -7,9 +7,11 @@
 
 typedef enum
 {
-    CONST_NOTE_SUSTAIN = 4,
+    CONST_NOTE_ATTACK = 4,
+    CONST_NOTE_AMPLIFICATION = 6,
     CONST_NOTES_MAX = 128,
     CONST_CHANNEL_MAX = 16,
+    CONST_NOTE_DECAY = 200,
     CONST_BEND_DEFAULT = 8192,
 }
 Const;
@@ -160,7 +162,7 @@ static void
 Note_Clamp(Note* note)
 {
     const int32_t min = 0;
-    const int32_t max = CONST_NOTE_SUSTAIN * 127;
+    const int32_t max = CONST_NOTE_ATTACK * 127;
     if(note->gain < min) note->gain = min;
     if(note->gain > max) note->gain = max;
 }
@@ -169,7 +171,7 @@ static void
 Note_Roll(Note* note)
 {
     const int32_t diff = note->gain_setpoint - note->gain;
-    const int32_t decay = 200;
+    const int32_t decay = CONST_NOTE_DECAY;
     if(diff == 0)
     {
         if(note->gain == 0)
@@ -179,10 +181,14 @@ Note_Roll(Note* note)
         }
         else // NOTE DECAY WHEN HELD.
         {
-            if(note->progress != 0 && (note->progress % decay == 0))
+            if(note->progress != 0)
             {
-                note->gain -= 1;
-                note->gain_setpoint -= 1;
+                bool must_decay = note->progress % decay == 0;
+                if(must_decay)
+                {
+                    note->gain -= 1;
+                    note->gain_setpoint -= 1;
+                }
             }
         }
     }
@@ -336,7 +342,7 @@ static int16_t
 Wave_SinHalf(Wave* wave)
 {
     const int16_t amp = Wave_Sin(wave);
-    return amp > 0 ? (1.2f * amp) : 0;
+    return amp > 0 ? (0.8f * amp) : 0;
 }
 
 static int16_t
@@ -387,7 +393,7 @@ static int16_t
     [  38 ] = Wave_SinHalf,
     [  39 ] = Wave_SinHalf,
     // STRINGS.
-    [  40 ] = Wave_TriangleHalf,
+    [  40 ] = Wave_Triangle,
     [  41 ] = Wave_Triangle,
     [  42 ] = Wave_Triangle,
     [  43 ] = Wave_Triangle,
@@ -430,10 +436,10 @@ static int16_t
     [  76 ] = Wave_Sin,
     [  77 ] = Wave_Sin,
     [  78 ] = Wave_Sin,
-    [  79 ] = Wave_Sin,
+    [  79 ] = Wave_Triangle,
     // SYNTH LEAD.
     [  80 ] = Wave_Sin,
-    [  81 ] = Wave_Sin,
+    [  81 ] = Wave_Triangle,
     [  82 ] = Wave_Triangle,
     [  83 ] = Wave_Sin,
     [  84 ] = Wave_Sin,
@@ -643,7 +649,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, const uint8_t leader)
             if(!Notes_IsPercussive(channel))
             {
                 Note* note = &notes->note[note_index][channel];
-                note->gain_setpoint = CONST_NOTE_SUSTAIN * note_velocity;
+                note->gain_setpoint = CONST_NOTE_ATTACK * note_velocity;
                 note->on = true;
                 meta->bend[channel] = CONST_BEND_DEFAULT;
             }
@@ -668,7 +674,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, const uint8_t leader)
                         Note* note = &notes->note[note_index][channel];
                         const bool audible = note->gain_setpoint > 0;
                         if(audible)
-                            note->gain_setpoint = CONST_NOTE_SUSTAIN * value;
+                            note->gain_setpoint = CONST_NOTE_ATTACK * value;
                     }
                     break;
                 }
@@ -855,7 +861,6 @@ Audio_Free(Audio* audio)
 static int32_t
 Audio_Play(void* data)
 {
-    const float amplification = 4;
     AudioConsumer* consumer = data;
     for(int32_t cycles = 0; consumer->audio->done == false; cycles++)
     {
@@ -890,7 +895,7 @@ Audio_Play(void* data)
                         }
                     }
                 }
-                mix *= amplification;
+                mix *= CONST_NOTE_AMPLIFICATION;
                 for(uint32_t speaker = 0; speaker < consumer->audio->spec.channels; speaker++)
                     mixes[sample + speaker] = mix;
             }
