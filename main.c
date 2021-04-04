@@ -11,7 +11,7 @@ typedef enum
     CONST_NOTE_AMPLIFICATION = 6,
     CONST_NOTES_MAX = 128,
     CONST_CHANNEL_MAX = 16,
-    CONST_NOTE_DECAY = 200,
+    CONST_NOTE_DECAY = 240,
     CONST_BEND_DEFAULT = 8192,
 }
 Const;
@@ -361,7 +361,7 @@ static int16_t
     [   9 ] = Wave_Sin,
     [  10 ] = Wave_Sin,
     [  11 ] = Wave_Sin,
-    [  12 ] = Wave_Sin,
+    [  12 ] = Wave_SinHalf,
     [  13 ] = Wave_Sin,
     [  14 ] = Wave_Sin,
     [  15 ] = Wave_Sin,
@@ -378,7 +378,7 @@ static int16_t
     [  24 ] = Wave_SinHalf,
     [  25 ] = Wave_SinHalf,
     [  26 ] = Wave_Square, // GOOD.
-    [  27 ] = Wave_SinHalf,
+    [  27 ] = Wave_TriangleHalf,
     [  28 ] = Wave_SinHalf,
     [  29 ] = Wave_SinHalf,
     [  30 ] = Wave_SinHalf,
@@ -391,7 +391,7 @@ static int16_t
     [  36 ] = Wave_SinHalf,
     [  37 ] = Wave_SinHalf,
     [  38 ] = Wave_SinHalf,
-    [  39 ] = Wave_SinHalf,
+    [  39 ] = Wave_TriangleHalf,
     // STRINGS.
     [  40 ] = Wave_Triangle,
     [  41 ] = Wave_Triangle,
@@ -415,7 +415,7 @@ static int16_t
     [  57 ] = Wave_TriangleHalf,
     [  58 ] = Wave_TriangleHalf,
     [  59 ] = Wave_TriangleHalf,
-    [  60 ] = Wave_TriangleHalf,
+    [  60 ] = Wave_Triangle,
     [  61 ] = Wave_TriangleHalf,
     [  62 ] = Wave_TriangleHalf,
     [  63 ] = Wave_TriangleHalf,
