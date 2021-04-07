@@ -1,6 +1,6 @@
 # MINIMIDI
 
-Minimidi plays MIDI files to the tune of Gameboy and NES hardware.
+Minimidi plays MIDI files in the tune of Gameboy and NES hardware.
 
 ![](image.png)
 
