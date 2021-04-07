@@ -19,6 +19,7 @@ typedef enum
     CONST_XRES = 1024,
     CONST_YRES = 768,
     CONST_VIDEO_SAMPLES = 2048,
+    CONST_VIDEO_GRAIN = 5,
 }
 Const;
 
@@ -365,9 +366,9 @@ static int16_t
     [   7 ] = Wave_Triangle,
     // Chromatic Percussion.
     [   8 ] = Wave_Square,
-    [   9 ] = Wave_Sin,
-    [  10 ] = Wave_Sin,
-    [  11 ] = Wave_Sin,
+    [   9 ] = Wave_Triangle,
+    [  10 ] = Wave_SinQuarter,
+    [  11 ] = Wave_TriangleHalf,
     [  12 ] = Wave_SinHalf,
     [  13 ] = Wave_Sin,
     [  14 ] = Wave_Sin,
@@ -383,7 +384,7 @@ static int16_t
     [  23 ] = Wave_Square,
     // Guitar.
     [  24 ] = Wave_SinQuarter,
-    [  25 ] = Wave_SinHalf,
+    [  25 ] = Wave_SinQuarter,
     [  26 ] = Wave_Square,
     [  27 ] = Wave_TriangleHalf,
     [  28 ] = Wave_SinHalf,
@@ -405,7 +406,7 @@ static int16_t
     [  42 ] = Wave_Triangle,
     [  43 ] = Wave_Triangle,
     [  44 ] = Wave_Triangle,
-    [  45 ] = Wave_Triangle,
+    [  45 ] = Wave_Square,
     [  46 ] = Wave_Square,
     [  47 ] = Wave_SinHalf,
     // Strings (more).
@@ -413,7 +414,7 @@ static int16_t
     [  49 ] = Wave_Triangle,
     [  50 ] = Wave_TriangleHalf,
     [  51 ] = Wave_Triangle,
-    [  52 ] = Wave_Triangle,
+    [  52 ] = Wave_TriangleHalf,
     [  53 ] = Wave_Triangle,
     [  54 ] = Wave_Triangle,
     [  55 ] = Wave_Triangle,
@@ -437,7 +438,7 @@ static int16_t
     [  71 ] = Wave_Square,
     // Pipe.
     [  72 ] = Wave_Sin,
-    [  73 ] = Wave_Sin,
+    [  73 ] = Wave_TriangleHalf,
     [  74 ] = Wave_Sin,
     [  75 ] = Wave_Sin,
     [  76 ] = Wave_Sin,
@@ -467,7 +468,7 @@ static int16_t
     [  97 ] = Wave_Sin,
     [  98 ] = Wave_Sin,
     [  99 ] = Wave_Sin,
-    [ 100 ] = Wave_Sin,
+    [ 100 ] = Wave_Square,
     [ 101 ] = Wave_Sin,
     [ 102 ] = Wave_Sin,
     [ 103 ] = Wave_Sin,
@@ -698,6 +699,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
         {
             uint8_t program = Track_U8(track);
             meta->instruments[channel] = program;
+            printf("channel[%2d] = %d\n", channel, program);
             break;
         }
         // Channel Aftertouch.
@@ -1072,14 +1074,19 @@ Video_Draw(Video* video, Meta* meta, Notes* notes)
                 max = buffer[i];
         for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
             buffer[i] /= max;
+        int index = 0;
+        int h = CONST_YRES / CONST_CHANNEL_MAX;
+        int a = h / 2;
+        int count = CONST_VIDEO_SAMPLES / CONST_VIDEO_GRAIN;
+        SDL_Point points[count];
         for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-        {
-            int h = CONST_YRES / CONST_CHANNEL_MAX;
-            int a = h / 2;
-            int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
-            int y = channel * h + -a * (buffer[i] - 1.0f);
-            SDL_RenderDrawPoint(video->renderer, x, y);
-        }
+            if(i % CONST_VIDEO_GRAIN == 0)
+            {
+                int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
+                int y = channel * h + -a * (buffer[i] - 1.0f);
+                points[index++] = (SDL_Point) { x, y };
+            }
+        SDL_RenderDrawLines(video->renderer, points, count);
     }
     SDL_RenderPresent(video->renderer);
 }
