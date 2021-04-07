@@ -1094,9 +1094,8 @@ Video_Play(void* data)
         SDL_PollEvent(&e);
         if(e.type == SDL_QUIT)
             DONE = true;
-        if(cycles % 10 == 0)
-            Video_Draw(consumer->video, consumer->meta, consumer->notes);
-        SDL_Delay(1);
+        Video_Draw(consumer->video, consumer->meta, consumer->notes);
+        SDL_Delay(10);
     }
     return 0;
 }
