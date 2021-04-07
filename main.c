@@ -16,8 +16,8 @@ typedef enum
     CONST_NOTE_DECAY = 240,
     CONST_BEND_DEFAULT = 8192,
     CONST_SAMPLE_FREQ = 44100,
-    CONST_XRES = 1600,
-    CONST_YRES = 1000,
+    CONST_XRES = 1024,
+    CONST_YRES = 768,
     CONST_VIDEO_SAMPLES = 2048,
 }
 Const;
@@ -237,51 +237,6 @@ Notes_Free(Notes* notes)
         putchar('\n');
 }
 
-static void
-Notes_Draw(Notes* notes, Meta* meta)
-{
-    char* grn = "\x1b[0;32m";
-    char* red = "\x1b[0;31m";
-    char* nrm = "\x1b[0;00m";
-    int note_index = 0;
-    int draw_per_channel = 4;
-    for(uint32_t y = 0; y < notes->display_rows; y++)
-    {
-        for(uint32_t x = 0; x < notes->display_cols; x++)
-        {
-            bool audible = false;
-            for(uint8_t channel = 0; channel < CONST_CHANNEL_MAX; channel++)
-            {
-                Note* note = &notes->note[channel][note_index];
-                audible = note->gain > 0;
-                if(audible)
-                    break;
-            }
-            printf("%s%4d", audible ? grn : red, note_index);
-            int got = 0;
-            for(uint8_t channel = 0; channel < CONST_CHANNEL_MAX; channel++)
-            {
-                Note* note = &notes->note[channel][note_index];
-                bool draw = note->gain > 0;
-                if(draw)
-                {
-                    uint8_t instrument = meta->instruments[channel];
-                    printf("%4d:%3X:%1X", instrument, note->gain, channel);
-                    got += 1;
-                }
-            }
-            for(int i = 0; i < draw_per_channel - got; i++)
-                printf("%10s", "");
-            note_index += 1;
-        }
-        putchar('\n');
-    }
-    // Go up by number of display rows and leftmost column.
-    printf("\x1B[%dA", notes->display_rows);
-    printf("\r");
-    printf(nrm);
-}
-
 static float
 Note_Freq(Note* note)
 {
@@ -333,28 +288,28 @@ Wave_Tick(Wave* wave)
     return x;
 }
 
-static int16_t // [1]
+static inline int16_t // [1]
 Wave_Sin(Wave* wave)
 {
     float x = Wave_Tick(wave);
     return wave->note->gain * sinf(x);
 }
 
-static int16_t // [2]
+static inline int16_t // [2]
 Wave_SinHalf(Wave* wave)
 {
     int16_t amp = Wave_Sin(wave);
     return amp > 0 ? (0.8f * amp) : 0;
 }
 
-static int16_t // [3]
+static inline int16_t // [3]
 Wave_SinAbs(Wave* wave)
 {
     int16_t amp = Wave_Sin(wave);
     return abs(amp);
 }
 
-static int16_t // [4]
+static inline int16_t // [4]
 Wave_SinQuarter(Wave* wave)
 {
     float f = Wave_Step(wave, wave->note->progress);
@@ -362,35 +317,35 @@ Wave_SinQuarter(Wave* wave)
     return cosf(f) > 0.0f ? x : 0;
 }
 
-static int16_t // [5]
+static inline int16_t // [5]
 Wave_SinAlt(Wave* wave)
 {
     int x = Wave_Sin(wave);
     return Note_IsEvenCycle(wave->note) ? x : 0;
 }
 
-static int16_t // [6]
+static inline int16_t // [6]
 Wave_SinAbsAlt(Wave* wave)
 {
     int x = Wave_SinAbs(wave);
     return Note_IsEvenCycle(wave->note) ? x : 0;
 }
 
-static int16_t // [7]
+static inline int16_t // [7]
 Wave_Square(Wave* wave)
 {
     int16_t amp = Wave_Sin(wave);
     return (amp >= 0 ? wave->note->gain : -wave->note->gain) / 10.0f;
 }
 
-static int16_t // [8] NOTE: Replaces sawtooth
+static inline int16_t // [8] NOTE: Replaces sawtooth
 Wave_Triangle(Wave* wave)
 {
     float x = Wave_Tick(wave);
     return wave->note->gain * asinf(sinf(x)) / 1.5708f / 3.0f;
 }
 
-static int16_t // [9]
+static inline int16_t // [9]
 Wave_TriangleHalf(Wave* wave)
 {
     int16_t amp = Wave_Triangle(wave);
@@ -1083,51 +1038,6 @@ Video_Free(Video* video)
 }
 
 void
-Video_VisualizeWaveforms(Video* video)
-{
-    int16_t (*waveforms[])(Wave* wave) = {
-        Wave_Sin,
-        Wave_SinHalf,
-        Wave_SinAbs,
-        Wave_SinQuarter,
-        Wave_SinAlt,
-        Wave_SinAbsAlt,
-        Wave_Square,
-        Wave_Triangle,
-        Wave_TriangleHalf,
-    };
-    SDL_SetRenderDrawColor(video->renderer, 0x00, 0x00, 0x00, 0x00);
-    SDL_RenderClear(video->renderer);
-    SDL_SetRenderDrawColor(video->renderer, 0xFF, 0xFF, 0xFF, 0xFF);
-    int len = sizeof(waveforms) / sizeof(*waveforms);
-    for(int j = 0; j < len; j++)
-    {
-        Meta meta = { 0 };
-        Note note = { .on = true, .gain = 1024 };
-        Wave wave = { &note, &meta, 0, 0 };
-        float freq = Note_Freq(&note);
-        int samples = 6 * CONST_SAMPLE_FREQ / freq;
-        int yy = CONST_YRES / (2 * len);
-        int xx = CONST_XRES;
-        int offset = -yy * (2 * j + 1);
-        int x0 = 0;
-        int y0 = 0;
-        for(int i = 0; i < samples; i++)
-        {
-            int x = +xx * i / (float) samples;
-            int y = -yy * waveforms[j](&wave) / (float) note.gain - offset;
-            if(i % 32 == 0)
-            {
-                SDL_RenderDrawLine(video->renderer, x0, y0, x, y);
-                x0 = x;
-                y0 = y;
-            }
-        }
-    }
-    SDL_RenderPresent(video->renderer);
-}
-
-void
 Video_Draw(Video* video, Meta* meta, Notes* notes)
 {
     uint32_t colors[CONST_CHANNEL_MAX] = {
@@ -1188,10 +1098,7 @@ Video_Play(void* data)
         if(e.type == SDL_QUIT)
             DONE = true;
         if(cycles % 10 == 0)
-        {
             Video_Draw(consumer->video, consumer->meta, consumer->notes);
-            Notes_Draw(consumer->notes, consumer->meta);
-        }
         SDL_Delay(1);
     }
     return 0;

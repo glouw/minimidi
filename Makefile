@@ -1,10 +1,11 @@
-CFLAGS = -Ofast -march=native -Wall -Wextra -Wpedantic -std=c99 -lm -lSDL2
+CFLAGS = -O3 -march=native -Wall -Wextra -Wpedantic
+LDFLAGS = -lm -lSDL2
 
-CC = gcc
+CC = gcc -std=c99
 
 BIN = minimidi
 
 SRC = main.c
 
 all:
-	$(CC) $(CFLAGS) $(SRC) -o $(BIN)
+	$(CC) $(CFLAGS) $(SRC) $(LDFLAGS) -o $(BIN)
