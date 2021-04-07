@@ -1054,7 +1054,7 @@ Video_Draw(Video* video, Meta* meta, Notes* notes)
         uint8_t b = color >> 0x00;
         SDL_SetRenderDrawColor(video->renderer, r, g, b, 0xFF);
         uint8_t instrument = meta->instruments[channel];
-        float* buffer = calloc(CONST_VIDEO_SAMPLES, sizeof(*buffer));
+        float buffer[CONST_VIDEO_SAMPLES] = { 0 };
         for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
         {
             Note copy = notes->note[channel][note_index];
@@ -1072,17 +1072,14 @@ Video_Draw(Video* video, Meta* meta, Notes* notes)
                 max = buffer[i];
         for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
             buffer[i] /= max;
+        for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
         {
-            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-            {
-                int h = CONST_YRES / CONST_CHANNEL_MAX;
-                int a = h / 2;
-                int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
-                int y = channel * h + -a * (buffer[i] - 1.0f);
-                SDL_RenderDrawPoint(video->renderer, x, y);
-            }
+            int h = CONST_YRES / CONST_CHANNEL_MAX;
+            int a = h / 2;
+            int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
+            int y = channel * h + -a * (buffer[i] - 1.0f);
+            SDL_RenderDrawPoint(video->renderer, x, y);
         }
-        free(buffer);
     }
     SDL_RenderPresent(video->renderer);
 }
