@@ -1,4 +1,4 @@
-CFLAGS = -O3 -march=native -Wall -Wextra -Wpedantic
+CFLAGS = -Ofast -march=native -Wall -Wextra -Wpedantic
 LDFLAGS = -lm -lSDL2
 
 CC = gcc -std=c99

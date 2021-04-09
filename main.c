@@ -1,3 +1,22 @@
+// TODO:
+// 1. Implement proper attack ADSR:
+// (A) ATTACK
+// (D) DECAY
+// (S) SUSTAIN
+// (R) RELEASE
+//
+/*       /\                   */
+/*      /  \                  */
+/*     /    \                 */
+/*    /      \__________      */
+/*   /                  \     */
+/*  /                    \    */
+/* /                      \   */
+/*/                        \  */
+/* --A----D-------S-------R-- */
+
+// 2.Build a signal viewer (needed for properly for viewing FM signals)
+
 #include <stdio.h>
 #include <math.h>
 #include <stdint.h>
@@ -13,13 +32,14 @@ typedef enum
     CONST_NOTE_AMPLIFICATION = 6,
     CONST_NOTES_MAX = 128,
     CONST_CHANNEL_MAX = 16,
-    CONST_NOTE_DECAY = 240,
+    CONST_NOTE_DECAY = 300,
     CONST_BEND_DEFAULT = 8192,
     CONST_SAMPLE_FREQ = 44100,
-    CONST_XRES = 1024,
-    CONST_YRES = 768,
+    CONST_XRES = 800,
+    CONST_YRES = 600,
     CONST_VIDEO_SAMPLES = 2048,
     CONST_VIDEO_GRAIN = 5,
+    CONST_MODULATION_GAIN = 512,
 }
 Const;
 
@@ -64,17 +84,15 @@ Note;
 typedef struct
 {
     Note note[CONST_CHANNEL_MAX][CONST_NOTES_MAX];
-    uint32_t display_rows;
-    uint32_t display_cols;
 }
 Notes;
 
 typedef struct
 {
-    Note* note;
+    Note* modu;
     Meta* meta;
     uint8_t channel;
-    uint32_t id;
+    int id;
 }
 Wave;
 
@@ -116,6 +134,7 @@ typedef struct
 {
     Audio* audio;
     Notes* notes;
+    Notes* modus;
     Meta* meta;
     Video* video;
 }
@@ -188,10 +207,9 @@ Note_Clamp(Note* note)
 }
 
 static void
-Note_Roll(Note* note)
+Note_Roll(Note* note) // Attack and Decay/Sustain.
 {
     int diff = note->gain_setpoint - note->gain;
-    int decay = CONST_NOTE_DECAY;
     if(diff == 0)
     {
         if(note->gain == 0)
@@ -204,7 +222,7 @@ Note_Roll(Note* note)
         {
             if(note->progress != 0)
             {
-                bool must_decay = note->progress % decay == 0;
+                bool must_decay = note->progress % CONST_NOTE_DECAY == 0;
                 if(must_decay)
                 {
                     note->gain -= 1;
@@ -221,21 +239,11 @@ Note_Roll(Note* note)
     }
 }
 
-static Notes
-Notes_Init(void)
-{
-    Notes notes = { 0 };
-    notes.display_rows = 32;
-    notes.display_cols = CONST_NOTES_MAX / notes.display_rows;
-    return notes;
-}
-
 static void
-Notes_Free(Notes* notes)
+Note_Process(Note* note)
 {
-    // Patch up display from clipping with prompt at exit.
-    for(uint32_t i = 0; i < notes->display_rows; i++)
-        putchar('\n');
+    Note_Roll(note);
+    Note_Clamp(note);
 }
 
 static float
@@ -245,260 +253,364 @@ Note_Freq(Note* note)
 }
 
 static float
-Wave_Step(Wave* wave, float progress)
+Note_Step(Note* note, float progress)
 {
-    float freq = Note_Freq(wave->note);
+    float freq = Note_Freq(note);
     float pi = 3.14159265358979323846f;
     return (progress * (2.0f * pi) * freq) / CONST_SAMPLE_FREQ;
 }
 
 static float
-Wave_Tick(Wave* wave)
+Note_Tick(Note* note, int bend, int id)
 {
-    int bend = wave->meta->bend[wave->channel];
-    if(!wave->note->was_init)
+    if(!note->was_init)
     {
-        wave->note->was_init = true;
-        wave->note->id = wave->id;
+        note->was_init = true;
+        note->id = id;
     }
-    if(bend != wave->note->bend_last)
+    if(bend != note->bend_last)
     {
-        wave->note->bend_last = bend;
-        wave->note->wait = true;
+        note->bend_last = bend;
+        note->wait = true;
     }
-    float x0 = Wave_Step(wave, wave->note->progress - 0.2f);
-    float x1 = Wave_Step(wave, wave->note->progress + 0.0f);
-    float a = wave->note->gain * sinf(x0);
-    float b = wave->note->gain * sinf(x1);
+    float x0 = Note_Step(note, note->progress - 0.2f);
+    float x1 = Note_Step(note, note->progress + 0.0f);
+    float a = note->gain * sinf(x0);
+    float b = note->gain * sinf(x1);
     bool crossed = a < 0.0f && b > 0.0f;
     if(crossed)
     {
-        wave->note->cycle += 1;
+        note->cycle += 1;
         // Note frequency can only be changed at axis crossing.
-        if(wave->note->wait)
+        if(note->wait)
         {
             float bend_semitones = 12.0f;
             float bend_id = (bend - CONST_BEND_DEFAULT) / (CONST_BEND_DEFAULT / bend_semitones);
-            wave->note->id = bend_id + wave->id;
-            wave->note->wait = false;
-            wave->note->progress = 0;
+            note->id = bend_id + id;
+            note->wait = false;
+            note->progress = 0;
         }
     }
-    float x = Wave_Step(wave, wave->note->progress);
-    wave->note->progress += 1;
+    float x = Note_Step(note, note->progress);
+    note->progress += 1;
     return x;
 }
 
-static inline int16_t // [1]
-Wave_Sin(Wave* wave)
+static void
+Notes_Setup(Notes* modus)
 {
-    float x = Wave_Tick(wave);
-    return wave->note->gain * sinf(x);
+    for(int i = 0; i < CONST_CHANNEL_MAX; i++)
+    for(int j = 0; j < CONST_NOTES_MAX; j++)
+    {
+        Note* note = &modus->note[i][j];
+        note->gain = note->gain_setpoint = CONST_MODULATION_GAIN;
+    }
 }
 
-static inline int16_t // [2]
-Wave_SinHalf(Wave* wave)
+static int16_t // [1]
+Wave_Sin
+(Wave* wave, Note* note, float fm)
 {
-    int16_t amp = Wave_Sin(wave);
-    return amp > 0 ? (0.8f * amp) : 0;
+    int bend = wave->meta->bend[wave->channel];
+    float x = Note_Tick(note, bend, wave->id);
+    return note->gain * sinf(x + fm);
 }
 
-static inline int16_t // [3]
-Wave_SinAbs(Wave* wave)
+static int16_t // [2]
+Wave_SinHalf
+(Wave* wave, Note* note, float fm)
 {
-    int16_t amp = Wave_Sin(wave);
+    int16_t amp = Wave_Sin(wave, note, fm);
+    return amp > 0 ? (1.1f * amp) : 0;
+}
+
+static int16_t // [3]
+Wave_SinAbs
+(Wave* wave, Note* note, float fm)
+{
+    int16_t amp = Wave_Sin(wave, note, fm);
     return abs(amp);
 }
 
-static inline int16_t // [4]
-Wave_SinQuarter(Wave* wave)
+static int16_t // [4]
+Wave_SinQuarter
+(Wave* wave, Note* note, float fm)
 {
-    float f = Wave_Step(wave, wave->note->progress);
-    int16_t x = 0.4f * Wave_SinHalf(wave);
+    float f = Note_Step(note, note->progress);
+    int16_t x = 0.4f * Wave_SinHalf(wave, note, fm);
     return cosf(f) > 0.0f ? x : 0;
 }
 
-static inline int16_t // [5]
-Wave_SinAlt(Wave* wave)
+static int16_t // [5]
+Wave_SinAlt
+(Wave* wave, Note* note, float fm)
 {
-    int x = Wave_Sin(wave);
-    return Note_IsEvenCycle(wave->note) ? x : 0;
+    int x = Wave_Sin(wave, note, fm);
+    return Note_IsEvenCycle(note) ? x : 0;
 }
 
-static inline int16_t // [6]
-Wave_SinAbsAlt(Wave* wave)
+static int16_t // [6]
+Wave_SinAbsAlt
+(Wave* wave, Note* note, float fm)
 {
-    int x = Wave_SinAbs(wave);
-    return Note_IsEvenCycle(wave->note) ? x : 0;
+    int x = Wave_SinAbs(wave, note, fm);
+    return Note_IsEvenCycle(note) ? x : 0;
 }
 
-static inline int16_t // [7]
-Wave_Square(Wave* wave)
+static int16_t // [7]
+Wave_Square
+(Wave* wave, Note* note, float fm)
 {
-    int16_t amp = Wave_Sin(wave);
-    return (amp >= 0 ? wave->note->gain : -wave->note->gain) / 10.0f;
+    int16_t amp = Wave_Sin(wave, note, fm);
+    return (amp >= 0 ? note->gain : -note->gain) / 8.0f;
 }
 
-static inline int16_t // [8] NOTE: Replaces sawtooth
-Wave_Triangle(Wave* wave)
+static int16_t // [8] NOTE: Replaces sawtooth
+Wave_Triangle
+(Wave* wave, Note* note, float fm)
 {
-    float x = Wave_Tick(wave);
-    return wave->note->gain * asinf(sinf(x)) / 1.5708f / 3.0f;
+    int bend = wave->meta->bend[wave->channel];
+    float x = Note_Tick(note, bend, wave->id);
+    return note->gain * asinf(sinf(x + fm)) / 1.5708f / 3.0f;
 }
 
-static inline int16_t // [9]
-Wave_TriangleHalf(Wave* wave)
+static int16_t // [9]
+Wave_TriangleHalf
+(Wave* wave, Note* note, float fm)
 {
-    int16_t amp = Wave_Triangle(wave);
-    return amp > 0 ? (2.5f * amp) : 0;
+    int16_t amp = Wave_Triangle(wave, note, fm);
+    return amp > 0 ? (1.6f * amp) : 0;
+}
+
+static float
+Flatten(int16_t gain)
+{
+    return gain / (1.0f * CONST_MODULATION_GAIN);
 }
 
 static int16_t
-(*WAVE_WAVEFORMS[])(Wave* wave) = {
+Wave_FM
+(
+    Wave* wave,
+    Note* note,
+    int16_t a(Wave*, Note*, float),
+    int16_t b(Wave*, Note*, float),
+    float multiplier
+)
+{
+    return a(wave, note, multiplier * Flatten(b(wave, wave->modu, 0.0f)));
+}
+
+static int16_t
+(Wave_Piano)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.2f * Wave_FM(wave, note, Wave_TriangleHalf, Wave_Sin, 1.0f);
+}
+
+static int16_t
+(Wave_Synth)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.4f * Wave_FM(wave, note, Wave_Triangle, Wave_Sin, 1.0f);
+}
+
+static int16_t
+(Wave_Guitar)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.5f * Wave_FM(wave, note, Wave_SinQuarter, Wave_Sin, 1.0f);
+}
+
+static int16_t
+(Wave_Bass)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.8f * Wave_FM(wave, note, Wave_SinHalf, Wave_Sin, 1.0f);
+}
+
+static int16_t
+(Wave_Pipe)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.35f * Wave_FM(wave, note, Wave_Square, Wave_Triangle, 0.5f);
+}
+
+static int16_t
+(Wave_Strings)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.35f * Wave_FM(wave, note, Wave_TriangleHalf, Wave_Square, 1.0f);
+}
+
+static int16_t
+(Wave_Brass)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.4f * Wave_FM(wave, note, Wave_Square, Wave_Sin, 1.0f);
+}
+
+static int16_t
+(Wave_Reed)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return 0.4f * Wave_FM(wave, note, Wave_Triangle, Wave_Sin, 1.0f);
+}
+
+static int16_t
+(*WAVE_WAVEFORMS[])(Wave* wave, Note* note, float fm) = {
     // Piano.
-    [   0 ] = Wave_Triangle,
-    [   1 ] = Wave_Triangle,
-    [   2 ] = Wave_Triangle,
-    [   3 ] = Wave_Triangle,
-    [   4 ] = Wave_Triangle,
-    [   5 ] = Wave_Triangle,
-    [   6 ] = Wave_Triangle,
-    [   7 ] = Wave_Triangle,
+    [   0 ] = Wave_Piano,
+    [   1 ] = Wave_Piano,
+    [   2 ] = Wave_Piano,
+    [   3 ] = Wave_Piano,
+    [   4 ] = Wave_Piano,
+    [   5 ] = Wave_Piano,
+    [   6 ] = Wave_Piano,
+    [   7 ] = Wave_Piano,
     // Chromatic Percussion.
-    [   8 ] = Wave_Square,
-    [   9 ] = Wave_Triangle,
-    [  10 ] = Wave_SinQuarter,
-    [  11 ] = Wave_TriangleHalf,
-    [  12 ] = Wave_SinHalf,
-    [  13 ] = Wave_Sin,
-    [  14 ] = Wave_Sin,
-    [  15 ] = Wave_Sin,
+    [   8 ] = Wave_Piano,
+    [   9 ] = Wave_Piano,
+    [  10 ] = Wave_Piano,
+    [  11 ] = Wave_Piano,
+    [  12 ] = Wave_Piano,
+    [  13 ] = Wave_Piano,
+    [  14 ] = Wave_Piano,
+    [  15 ] = Wave_Piano,
     // Organ.
-    [  16 ] = Wave_Square,
-    [  17 ] = Wave_Square,
-    [  18 ] = Wave_Square,
-    [  19 ] = Wave_Square,
-    [  20 ] = Wave_Square,
-    [  21 ] = Wave_Square,
-    [  22 ] = Wave_Square,
-    [  23 ] = Wave_Square,
+    [  16 ] = Wave_Piano,
+    [  17 ] = Wave_Piano,
+    [  18 ] = Wave_Piano,
+    [  19 ] = Wave_Piano,
+    [  20 ] = Wave_Piano,
+    [  21 ] = Wave_Piano,
+    [  22 ] = Wave_Piano,
+    [  23 ] = Wave_Piano,
     // Guitar.
-    [  24 ] = Wave_SinQuarter,
-    [  25 ] = Wave_SinQuarter,
-    [  26 ] = Wave_Square,
-    [  27 ] = Wave_TriangleHalf,
-    [  28 ] = Wave_SinHalf,
-    [  29 ] = Wave_SinHalf,
-    [  30 ] = Wave_SinHalf,
-    [  31 ] = Wave_SinHalf,
+    [  24 ] = Wave_Guitar,
+    [  25 ] = Wave_Guitar,
+    [  26 ] = Wave_Guitar,
+    [  27 ] = Wave_Guitar,
+    [  28 ] = Wave_Guitar,
+    [  29 ] = Wave_Guitar,
+    [  30 ] = Wave_Guitar,
+    [  31 ] = Wave_Guitar,
     // Bass.
-    [  32 ] = Wave_TriangleHalf,
-    [  33 ] = Wave_SinHalf,
-    [  34 ] = Wave_SinHalf,
-    [  35 ] = Wave_SinHalf,
-    [  36 ] = Wave_SinHalf,
-    [  37 ] = Wave_SinHalf,
-    [  38 ] = Wave_SinHalf,
-    [  39 ] = Wave_TriangleHalf,
+    [  32 ] = Wave_Bass,
+    [  33 ] = Wave_Bass,
+    [  34 ] = Wave_Bass,
+    [  35 ] = Wave_Bass,
+    [  36 ] = Wave_Bass,
+    [  37 ] = Wave_Bass,
+    [  38 ] = Wave_Bass,
+    [  39 ] = Wave_Bass,
     // Strings.
-    [  40 ] = Wave_Triangle,
-    [  41 ] = Wave_Triangle,
-    [  42 ] = Wave_Triangle,
-    [  43 ] = Wave_Triangle,
-    [  44 ] = Wave_Triangle,
-    [  45 ] = Wave_Square,
-    [  46 ] = Wave_Square,
-    [  47 ] = Wave_SinHalf,
+    [  40 ] = Wave_Strings,
+    [  41 ] = Wave_Strings,
+    [  42 ] = Wave_Strings,
+    [  43 ] = Wave_Strings,
+    [  44 ] = Wave_Strings,
+    [  45 ] = Wave_Strings,
+    [  46 ] = Wave_Strings,
+    [  47 ] = Wave_Strings,
     // Strings (more).
-    [  48 ] = Wave_Triangle,
-    [  49 ] = Wave_Triangle,
-    [  50 ] = Wave_TriangleHalf,
-    [  51 ] = Wave_Triangle,
-    [  52 ] = Wave_TriangleHalf,
-    [  53 ] = Wave_Triangle,
-    [  54 ] = Wave_Triangle,
-    [  55 ] = Wave_Triangle,
+    [  48 ] = Wave_Strings,
+    [  49 ] = Wave_Strings,
+    [  50 ] = Wave_Strings,
+    [  51 ] = Wave_Strings,
+    [  52 ] = Wave_Strings,
+    [  53 ] = Wave_Strings,
+    [  54 ] = Wave_Strings,
+    [  55 ] = Wave_Strings,
     // Brass.
-    [  56 ] = Wave_TriangleHalf,
-    [  57 ] = Wave_TriangleHalf,
-    [  58 ] = Wave_TriangleHalf,
-    [  59 ] = Wave_TriangleHalf,
-    [  60 ] = Wave_Triangle,
-    [  61 ] = Wave_TriangleHalf,
-    [  62 ] = Wave_TriangleHalf,
-    [  63 ] = Wave_TriangleHalf,
+    [  56 ] = Wave_Brass,
+    [  57 ] = Wave_Brass,
+    [  58 ] = Wave_Brass,
+    [  59 ] = Wave_Brass,
+    [  60 ] = Wave_Brass,
+    [  61 ] = Wave_Brass,
+    [  62 ] = Wave_Brass,
+    [  63 ] = Wave_Brass,
     // Reed.
-    [  64 ] = Wave_Square,
-    [  65 ] = Wave_Square,
-    [  66 ] = Wave_Square,
-    [  67 ] = Wave_Square,
-    [  68 ] = Wave_Square,
-    [  69 ] = Wave_Square,
-    [  70 ] = Wave_Square,
-    [  71 ] = Wave_Square,
+    [  64 ] = Wave_Reed,
+    [  65 ] = Wave_Reed,
+    [  66 ] = Wave_Reed,
+    [  67 ] = Wave_Reed,
+    [  68 ] = Wave_Reed,
+    [  69 ] = Wave_Reed,
+    [  70 ] = Wave_Reed,
+    [  71 ] = Wave_Reed,
     // Pipe.
-    [  72 ] = Wave_Sin,
-    [  73 ] = Wave_TriangleHalf,
-    [  74 ] = Wave_Sin,
-    [  75 ] = Wave_Sin,
-    [  76 ] = Wave_Sin,
-    [  77 ] = Wave_Sin,
-    [  78 ] = Wave_Sin,
-    [  79 ] = Wave_Triangle,
+    [  72 ] = Wave_Pipe,
+    [  73 ] = Wave_Pipe,
+    [  74 ] = Wave_Pipe,
+    [  75 ] = Wave_Pipe,
+    [  76 ] = Wave_Pipe,
+    [  77 ] = Wave_Pipe,
+    [  78 ] = Wave_Pipe,
+    [  79 ] = Wave_Pipe,
     // Synth Lead.
-    [  80 ] = Wave_Sin,
-    [  81 ] = Wave_Triangle,
-    [  82 ] = Wave_Triangle,
-    [  83 ] = Wave_Sin,
-    [  84 ] = Wave_Sin,
-    [  85 ] = Wave_Sin,
-    [  86 ] = Wave_Sin,
-    [  87 ] = Wave_Sin,
+    [  80 ] = Wave_Synth,
+    [  81 ] = Wave_Synth,
+    [  82 ] = Wave_Synth,
+    [  83 ] = Wave_Synth,
+    [  84 ] = Wave_Synth,
+    [  85 ] = Wave_Synth,
+    [  86 ] = Wave_Synth,
+    [  87 ] = Wave_Synth,
     // Synth Pad.
-    [  88 ] = Wave_Sin,
-    [  89 ] = Wave_Sin,
-    [  90 ] = Wave_Sin,
-    [  91 ] = Wave_Sin,
-    [  92 ] = Wave_Sin,
-    [  93 ] = Wave_Sin,
-    [  94 ] = Wave_Sin,
-    [  95 ] = Wave_Sin,
+    [  88 ] = Wave_Synth,
+    [  89 ] = Wave_Synth,
+    [  90 ] = Wave_Synth,
+    [  91 ] = Wave_Synth,
+    [  92 ] = Wave_Synth,
+    [  93 ] = Wave_Synth,
+    [  94 ] = Wave_Synth,
+    [  95 ] = Wave_Synth,
     // Synth Effects.
-    [  96 ] = Wave_Sin,
-    [  97 ] = Wave_Sin,
-    [  98 ] = Wave_Sin,
-    [  99 ] = Wave_Sin,
-    [ 100 ] = Wave_Square,
-    [ 101 ] = Wave_Sin,
-    [ 102 ] = Wave_Sin,
-    [ 103 ] = Wave_Sin,
+    [  96 ] = Wave_Synth,
+    [  97 ] = Wave_Synth,
+    [  98 ] = Wave_Synth,
+    [  99 ] = Wave_Synth,
+    [ 100 ] = Wave_Synth,
+    [ 101 ] = Wave_Synth,
+    [ 102 ] = Wave_Synth,
+    [ 103 ] = Wave_Synth,
     // Ethnic.
-    [ 104 ] = Wave_Sin,
-    [ 105 ] = Wave_Sin,
-    [ 106 ] = Wave_Sin,
-    [ 107 ] = Wave_Sin,
-    [ 108 ] = Wave_Sin,
-    [ 109 ] = Wave_Sin,
-    [ 110 ] = Wave_Sin,
-    [ 111 ] = Wave_Sin,
+    [ 104 ] = Wave_Piano,
+    [ 105 ] = Wave_Piano,
+    [ 106 ] = Wave_Piano,
+    [ 107 ] = Wave_Piano,
+    [ 108 ] = Wave_Piano,
+    [ 109 ] = Wave_Piano,
+    [ 110 ] = Wave_Piano,
+    [ 111 ] = Wave_Piano,
     // Percussive.
-    [ 112 ] = Wave_Sin,
-    [ 113 ] = Wave_Sin,
-    [ 114 ] = Wave_Sin,
-    [ 115 ] = Wave_Sin,
-    [ 116 ] = Wave_Sin,
-    [ 117 ] = Wave_Sin,
-    [ 118 ] = Wave_Sin,
-    [ 119 ] = Wave_Sin,
+    [ 112 ] = Wave_Piano,
+    [ 113 ] = Wave_Piano,
+    [ 114 ] = Wave_Piano,
+    [ 115 ] = Wave_Piano,
+    [ 116 ] = Wave_Piano,
+    [ 117 ] = Wave_Piano,
+    [ 118 ] = Wave_Piano,
+    [ 119 ] = Wave_Piano,
     // Sound Effects.
-    [ 120 ] = Wave_Sin,
-    [ 121 ] = Wave_Sin,
-    [ 122 ] = Wave_Sin,
-    [ 123 ] = Wave_Sin,
-    [ 124 ] = Wave_Sin,
-    [ 125 ] = Wave_Sin,
-    [ 126 ] = Wave_Sin,
-    [ 127 ] = Wave_Sin,
+    [ 120 ] = Wave_Piano,
+    [ 121 ] = Wave_Piano,
+    [ 122 ] = Wave_Piano,
+    [ 123 ] = Wave_Piano,
+    [ 124 ] = Wave_Piano,
+    [ 125 ] = Wave_Piano,
+    [ 126 ] = Wave_Piano,
+    [ 127 ] = Wave_Piano,
 };
 
 static Args
@@ -621,7 +733,7 @@ Track_Status(Track* track, uint8_t status)
 }
 
 static bool
-Notes_IsPercussive(uint8_t channel)
+IsPercussive(uint8_t channel)
 {
     return channel == 9;
 }
@@ -643,7 +755,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
         {
             uint8_t note_index = Track_U8(track);
             Track_U8(track);
-            if(!Notes_IsPercussive(channel))
+            if(!IsPercussive(channel))
             {
                 Note* note = &notes->note[channel][note_index];
                 note->gain_setpoint = 0;
@@ -656,7 +768,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
         {
             uint8_t note_index = Track_U8(track);
             uint8_t note_velocity = Track_U8(track);
-            if(!Notes_IsPercussive(channel))
+            if(!IsPercussive(channel))
             {
                 Note* note = &notes->note[channel][note_index];
                 note->gain_setpoint = CONST_NOTE_ATTACK * note_velocity;
@@ -900,17 +1012,17 @@ Audio_Play(void* data)
                     for(uint8_t channel = 0; channel < CONST_CHANNEL_MAX; channel++)
                     {
                         Note* note = &consumer->notes->note[channel][note_index];
+                        Note* modu = &consumer->modus->note[channel][note_index];
                         if(note->on)
                         {
-                            Note_Roll(note);
-                            Note_Clamp(note);
+                            Note_Process(note);
+                            Note_Process(modu);
                             bool audible = note->gain > 0;
                             if(audible)
                             {
                                 uint8_t instrument = consumer->meta->instruments[channel];
-                                Wave wave = { note, consumer->meta, channel, note_index };
-                                int16_t sample = WAVE_WAVEFORMS[instrument](&wave);
-                                mix += sample;
+                                Wave wave = { modu, consumer->meta, channel, note_index };
+                                mix += WAVE_WAVEFORMS[instrument](&wave, note, 0.0f);
                             }
                         }
                     }
@@ -1040,53 +1152,78 @@ Video_Free(Video* video)
 }
 
 void
-Video_Draw(Video* video, Meta* meta, Notes* notes)
+Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
 {
     uint32_t colors[CONST_CHANNEL_MAX] = {
         0x414b7e, 0x636fb2, 0xadc4ff, 0xffffff, 0xffccd7, 0xff7fbd, 0x872450, 0xe52d40,
         0xef604a, 0xffd877, 0x00cc8b, 0x005a75, 0x513ae8, 0x19baff, 0x7731a5, 0xb97cff,
     };
-    SDL_SetRenderDrawColor(video->renderer, 0x00, 0x00, 0x00, 0x00);
-    SDL_RenderClear(video->renderer);
+    int h = CONST_YRES / CONST_CHANNEL_MAX;
+    int amp = h / 2;
+    int point_count = CONST_VIDEO_SAMPLES / CONST_VIDEO_GRAIN;
+    // Clear screen.
+    {
+        SDL_SetRenderDrawColor(video->renderer, 0x00, 0x00, 0x00, 0x00);
+        SDL_RenderClear(video->renderer);
+    }
+    // Draw channel lines.
+    {
+        SDL_SetRenderDrawColor(video->renderer, 0xAA, 0xAA, 0xAA, 0xAA);
+        for(int i = 0; i < CONST_CHANNEL_MAX; i++)
+        {
+            int y = i * h;
+            SDL_RenderDrawLine(video->renderer, 0, y, CONST_XRES, y);
+        }
+    }
     for(int channel = 0; channel < CONST_CHANNEL_MAX; channel++)
     {
-        uint32_t color = colors[channel];
-        uint8_t r = color >> 0x10;
-        uint8_t g = color >> 0x08;
-        uint8_t b = color >> 0x00;
-        SDL_SetRenderDrawColor(video->renderer, r, g, b, 0xFF);
-        uint8_t instrument = meta->instruments[channel];
+        // Buffer signal (zero phase).
         float buffer[CONST_VIDEO_SAMPLES] = { 0 };
-        for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
         {
-            Note copy = notes->note[channel][note_index];
-            if(copy.on)
+            uint8_t instrument = meta->instruments[channel];
+            for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
             {
-                copy.progress = 0;
-                Wave wave = { &copy, meta, channel, note_index };
-                for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-                    buffer[i] += WAVE_WAVEFORMS[instrument](&wave);
+                Note note = notes->note[channel][note_index];
+                Note modu = modus->note[channel][note_index];
+                if(note.on)
+                {
+                    note.progress = modu.progress = 0;
+                    Wave wave = { &modu, meta, channel, note_index };
+                    for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+                        buffer[i] += WAVE_WAVEFORMS[instrument](&wave, &note, 0.0f);
+                }
             }
         }
-        float max = 0;
-        for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-            if(buffer[i] > max)
-                max = buffer[i];
-        for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-            buffer[i] /= max;
-        int index = 0;
-        int h = CONST_YRES / CONST_CHANNEL_MAX;
-        int a = h / 2;
-        int count = CONST_VIDEO_SAMPLES / CONST_VIDEO_GRAIN;
-        SDL_Point points[count];
-        for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-            if(i % CONST_VIDEO_GRAIN == 0)
-            {
-                int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
-                int y = channel * h + -a * (buffer[i] - 1.0f);
-                points[index++] = (SDL_Point) { x, y };
-            }
-        SDL_RenderDrawLines(video->renderer, points, count);
+        // Scale signal.
+        {
+            float max = 0;
+            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+                if(buffer[i] > max)
+                    max = buffer[i];
+            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+                buffer[i] /= max;
+        }
+        // Collect signal into an array of points.
+        SDL_Point points[point_count];
+        {
+            int index = 0;
+            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+                if(i % CONST_VIDEO_GRAIN == 0)
+                {
+                    int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
+                    int y = channel * h - amp * (buffer[i] - 1.0f);
+                    points[index++] = (SDL_Point) { x, y };
+                }
+        }
+        // Draw signal points.
+        {
+            uint32_t color = colors[channel];
+            uint8_t r = color >> 0x10;
+            uint8_t g = color >> 0x08;
+            uint8_t b = color >> 0x00;
+            SDL_SetRenderDrawColor(video->renderer, r, g, b, 0xFF);
+            SDL_RenderDrawLines(video->renderer, points, point_count);
+        }
     }
     SDL_RenderPresent(video->renderer);
 }
@@ -1101,7 +1238,7 @@ Video_Play(void* data)
         SDL_PollEvent(&e);
         if(e.type == SDL_QUIT)
             DONE = true;
-        Video_Draw(consumer->video, consumer->meta, consumer->notes);
+        Video_Draw(consumer->video, consumer->meta, consumer->notes, consumer->modus);
         SDL_Delay(10);
     }
     return 0;
@@ -1115,10 +1252,12 @@ main(int argc, char** argv)
     Video video = Video_Init();
     Audio audio = Audio_Init();
     Bytes bytes = Bytes_FromFile(args.file);
-    Notes notes = Notes_Init();
+    Notes notes = { 0 };
+    Notes modus = { 0 };
     Meta meta = { 0 };
+    Notes_Setup(&modus);
     // Consume...
-    Consumer consumer = { &audio, &notes, &meta, &video };
+    Consumer consumer = { &audio, &notes, &modus, &meta, &video };
     SDL_Thread* audio_thread = SDL_CreateThread(Audio_Play, "MIDI-AUDIO-CONSUMER", &consumer);
     SDL_Thread* video_thread = SDL_CreateThread(Video_Play, "MIDI-VIDEO-CONSUMER", &consumer);
     // .. And produce.
@@ -1135,7 +1274,6 @@ main(int argc, char** argv)
     Bytes_Free(&bytes);
     Args_Free(&args);
     Audio_Free(&audio);
-    Notes_Free(&notes);
     SDL_Quit();
     exit(ERROR_NONE);
 }
