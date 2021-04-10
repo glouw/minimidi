@@ -7,7 +7,7 @@
 
 static bool DONE = false;
 
-const float PI = 3.14159265358979323846f;
+static const float PI = 3.14159265358979323846f;
 
 typedef enum
 {
@@ -378,7 +378,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRH, Wave_SIN, 0.40f);
 }
 
 static int16_t
