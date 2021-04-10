@@ -1,22 +1,3 @@
-// TODO:
-// 1. Implement proper attack ADSR:
-// (A) ATTACK
-// (D) DECAY
-// (S) SUSTAIN
-// (R) RELEASE
-//
-/*       /\                   */
-/*      /  \                  */
-/*     /    \                 */
-/*    /      \__________      */
-/*   /                  \     */
-/*  /                    \    */
-/* /                      \   */
-/*/                        \  */
-/* --A----D-------S-------R-- */
-
-// 2.Build a signal viewer (needed for properly for viewing FM signals)
-
 #include <stdio.h>
 #include <math.h>
 #include <stdint.h>
@@ -34,7 +15,7 @@ typedef enum
     CONST_NOTE_AMPLIFICATION = 6,
     CONST_NOTES_MAX = 128,
     CONST_CHANNEL_MAX = 16,
-    CONST_NOTE_DECAY = 300,
+    CONST_NOTE_DECAY = 400,
     CONST_BEND_DEFAULT = 8192,
     CONST_SAMPLE_FREQ = 44100,
     CONST_XRES = 1024,
