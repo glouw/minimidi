@@ -26,6 +26,8 @@
 
 static bool DONE = false;
 
+const float PI = 3.14159265358979323846f;
+
 typedef enum
 {
     CONST_NOTE_ATTACK = 4,
@@ -35,11 +37,12 @@ typedef enum
     CONST_NOTE_DECAY = 300,
     CONST_BEND_DEFAULT = 8192,
     CONST_SAMPLE_FREQ = 44100,
-    CONST_XRES = 800,
-    CONST_YRES = 600,
+    CONST_XRES = 1024,
+    CONST_YRES = 768,
     CONST_VIDEO_SAMPLES = 2048,
     CONST_VIDEO_GRAIN = 5,
     CONST_MODULATION_GAIN = 512,
+    CONST_BANK_WIDTH = 8,
 }
 Const;
 
@@ -93,8 +96,11 @@ typedef struct
     Meta* meta;
     uint8_t channel;
     int id;
+    int bank;
 }
 Wave;
+
+typedef int16_t Signal(Wave*, Note*, float fm);
 
 typedef struct
 {
@@ -151,6 +157,12 @@ typedef struct
 }
 Midi;
 
+static int
+Meta_GetBank(Meta* meta, int channel)
+{
+    return meta->instruments[channel] / CONST_BANK_WIDTH;
+}
+
 static Bytes
 Bytes_FromFile(FILE* file)
 {
@@ -189,12 +201,6 @@ static uint32_t
 Bytes_U32(Bytes* bytes, uint32_t index)
 {
     return Bytes_U16(bytes, index + 0) << 16 | Bytes_U16(bytes, index + 2);
-}
-
-static bool
-Note_IsEvenCycle(Note* note)
-{
-    return (note->cycle % 2) == 0;
 }
 
 static void
@@ -256,8 +262,7 @@ static float
 Note_Step(Note* note, float progress)
 {
     float freq = Note_Freq(note);
-    float pi = 3.14159265358979323846f;
-    return (progress * (2.0f * pi) * freq) / CONST_SAMPLE_FREQ;
+    return (progress * (2.0f * PI) * freq) / CONST_SAMPLE_FREQ;
 }
 
 static float
@@ -307,78 +312,48 @@ Notes_Setup(Notes* modus)
     }
 }
 
-static int16_t // [1]
-Wave_Sin
-(Wave* wave, Note* note, float fm)
+static int16_t // Sin
+Wave_SIN(Wave* wave, Note* note, float fm)
 {
     int bend = wave->meta->bend[wave->channel];
     float x = Note_Tick(note, bend, wave->id);
     return note->gain * sinf(x + fm);
 }
 
-static int16_t // [2]
-Wave_SinHalf
-(Wave* wave, Note* note, float fm)
+static int16_t // Sin Half
+Wave_SNH(Wave* wave, Note* note, float fm)
 {
-    int16_t amp = Wave_Sin(wave, note, fm);
+    int16_t amp = Wave_SIN(wave, note, fm);
     return amp > 0 ? (1.1f * amp) : 0;
 }
 
-static int16_t // [3]
-Wave_SinAbs
-(Wave* wave, Note* note, float fm)
-{
-    int16_t amp = Wave_Sin(wave, note, fm);
-    return abs(amp);
-}
-
-static int16_t // [4]
-Wave_SinQuarter
-(Wave* wave, Note* note, float fm)
+static int16_t // Sin Quarter
+Wave_SNQ(Wave* wave, Note* note, float fm)
 {
     float f = Note_Step(note, note->progress);
-    int16_t x = 0.4f * Wave_SinHalf(wave, note, fm);
+    int16_t x = 0.4f * Wave_SNH(wave, note, fm);
     return cosf(f) > 0.0f ? x : 0;
 }
 
-static int16_t // [5]
-Wave_SinAlt
-(Wave* wave, Note* note, float fm)
+static int16_t // Square
+Wave_SQR(Wave* wave, Note* note, float fm)
 {
-    int x = Wave_Sin(wave, note, fm);
-    return Note_IsEvenCycle(note) ? x : 0;
-}
-
-static int16_t // [6]
-Wave_SinAbsAlt
-(Wave* wave, Note* note, float fm)
-{
-    int x = Wave_SinAbs(wave, note, fm);
-    return Note_IsEvenCycle(note) ? x : 0;
-}
-
-static int16_t // [7]
-Wave_Square
-(Wave* wave, Note* note, float fm)
-{
-    int16_t amp = Wave_Sin(wave, note, fm);
+    int16_t amp = Wave_SIN(wave, note, fm);
     return (amp >= 0 ? note->gain : -note->gain) / 8.0f;
 }
 
-static int16_t // [8] NOTE: Replaces sawtooth
-Wave_Triangle
-(Wave* wave, Note* note, float fm)
+static int16_t // Triangle
+Wave_TRI(Wave* wave, Note* note, float fm)
 {
     int bend = wave->meta->bend[wave->channel];
     float x = Note_Tick(note, bend, wave->id);
     return note->gain * asinf(sinf(x + fm)) / 1.5708f / 3.0f;
 }
 
-static int16_t // [9]
-Wave_TriangleHalf
-(Wave* wave, Note* note, float fm)
+static int16_t // Triangle Half
+Wave_TRH(Wave* wave, Note* note, float fm)
 {
-    int16_t amp = Wave_Triangle(wave, note, fm);
+    int16_t amp = Wave_TRI(wave, note, fm);
     return amp > 0 ? (1.6f * amp) : 0;
 }
 
@@ -388,17 +363,17 @@ Flatten(int16_t gain)
     return gain / (1.0f * CONST_MODULATION_GAIN);
 }
 
-static int16_t
-Wave_FM
-(
-    Wave* wave,
-    Note* note,
-    int16_t a(Wave*, Note*, float),
-    int16_t b(Wave*, Note*, float),
-    float multiplier
-)
+static float
+Wave_GetFMMultiplier(Wave* wave)
 {
-    return a(wave, note, multiplier * Flatten(b(wave, wave->modu, 0.0f)));
+    return (PI / 8.0f) + (PI / 4.0f) * wave->bank / (float) CONST_BANK_WIDTH;
+}
+
+static int16_t
+Wave_FM(Wave* wave, Note* note, Signal a, Signal b, float volume)
+{
+    float multiplier = Wave_GetFMMultiplier(wave);
+    return volume * a(wave, note, multiplier * Flatten(b(wave, wave->modu, 0.0f)));
 }
 
 static int16_t
@@ -406,15 +381,47 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.2f * Wave_FM(wave, note, Wave_TriangleHalf, Wave_Sin, 1.0f);
+    return Wave_FM(wave, note, Wave_SIN, Wave_SIN, 0.40f);
 }
 
 static int16_t
-(Wave_Synth)
+(Wave_ChromaticPercussion)
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.4f * Wave_FM(wave, note, Wave_Triangle, Wave_Sin, 1.0f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+}
+
+static int16_t
+(Wave_Organ)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+}
+
+static int16_t
+(Wave_SynthLead)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+}
+
+static int16_t
+(Wave_SynthPad)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+}
+
+static int16_t
+(Wave_SynthEffects)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
 }
 
 static int16_t
@@ -422,7 +429,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.5f * Wave_FM(wave, note, Wave_SinQuarter, Wave_Sin, 1.0f);
+    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.40f);
 }
 
 static int16_t
@@ -430,7 +437,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.8f * Wave_FM(wave, note, Wave_SinHalf, Wave_Sin, 1.0f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.80f);
 }
 
 static int16_t
@@ -438,15 +445,23 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.35f * Wave_FM(wave, note, Wave_Square, Wave_Triangle, 0.5f);
+    return Wave_FM(wave, note, Wave_SQR, Wave_TRI, 0.35f);
 }
 
 static int16_t
-(Wave_Strings)
+(Wave_Strings1)
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.35f * Wave_FM(wave, note, Wave_TriangleHalf, Wave_Square, 1.0f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.30f);
+}
+
+static int16_t
+(Wave_Strings2)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.35f);
 }
 
 static int16_t
@@ -454,7 +469,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.4f * Wave_FM(wave, note, Wave_Square, Wave_Sin, 1.0f);
+    return Wave_FM(wave, note, Wave_SQR, Wave_SIN, 0.40f);
 }
 
 static int16_t
@@ -462,155 +477,55 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return 0.4f * Wave_FM(wave, note, Wave_Triangle, Wave_Sin, 1.0f);
+    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.40f);
+}
+
+static int16_t
+(Wave_Ethnic)
+(Wave* wave, Note* note, float fm)
+{
+    (void) fm;
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+}
+
+static int16_t
+(Wave_Percussive)
+(Wave* wave, Note* note, float fm)
+{
+    (void) wave;
+    (void) note;
+    (void) fm;
+    return 0.0f;
+}
+
+static int16_t
+(Wave_SoundEffects)
+(Wave* wave, Note* note, float fm)
+{
+    (void) wave;
+    (void) note;
+    (void) fm;
+    return 0.0f;
 }
 
 static int16_t
 (*WAVE_WAVEFORMS[])(Wave* wave, Note* note, float fm) = {
-    // Piano.
-    [   0 ] = Wave_Piano,
-    [   1 ] = Wave_Piano,
-    [   2 ] = Wave_Piano,
-    [   3 ] = Wave_Piano,
-    [   4 ] = Wave_Piano,
-    [   5 ] = Wave_Piano,
-    [   6 ] = Wave_Piano,
-    [   7 ] = Wave_Piano,
-    // Chromatic Percussion.
-    [   8 ] = Wave_Piano,
-    [   9 ] = Wave_Piano,
-    [  10 ] = Wave_Piano,
-    [  11 ] = Wave_Piano,
-    [  12 ] = Wave_Piano,
-    [  13 ] = Wave_Piano,
-    [  14 ] = Wave_Piano,
-    [  15 ] = Wave_Piano,
-    // Organ.
-    [  16 ] = Wave_Piano,
-    [  17 ] = Wave_Piano,
-    [  18 ] = Wave_Piano,
-    [  19 ] = Wave_Piano,
-    [  20 ] = Wave_Piano,
-    [  21 ] = Wave_Piano,
-    [  22 ] = Wave_Piano,
-    [  23 ] = Wave_Piano,
-    // Guitar.
-    [  24 ] = Wave_Guitar,
-    [  25 ] = Wave_Guitar,
-    [  26 ] = Wave_Guitar,
-    [  27 ] = Wave_Guitar,
-    [  28 ] = Wave_Guitar,
-    [  29 ] = Wave_Guitar,
-    [  30 ] = Wave_Guitar,
-    [  31 ] = Wave_Guitar,
-    // Bass.
-    [  32 ] = Wave_Bass,
-    [  33 ] = Wave_Bass,
-    [  34 ] = Wave_Bass,
-    [  35 ] = Wave_Bass,
-    [  36 ] = Wave_Bass,
-    [  37 ] = Wave_Bass,
-    [  38 ] = Wave_Bass,
-    [  39 ] = Wave_Bass,
-    // Strings.
-    [  40 ] = Wave_Strings,
-    [  41 ] = Wave_Strings,
-    [  42 ] = Wave_Strings,
-    [  43 ] = Wave_Strings,
-    [  44 ] = Wave_Strings,
-    [  45 ] = Wave_Strings,
-    [  46 ] = Wave_Strings,
-    [  47 ] = Wave_Strings,
-    // Strings (more).
-    [  48 ] = Wave_Strings,
-    [  49 ] = Wave_Strings,
-    [  50 ] = Wave_Strings,
-    [  51 ] = Wave_Strings,
-    [  52 ] = Wave_Strings,
-    [  53 ] = Wave_Strings,
-    [  54 ] = Wave_Strings,
-    [  55 ] = Wave_Strings,
-    // Brass.
-    [  56 ] = Wave_Brass,
-    [  57 ] = Wave_Brass,
-    [  58 ] = Wave_Brass,
-    [  59 ] = Wave_Brass,
-    [  60 ] = Wave_Brass,
-    [  61 ] = Wave_Brass,
-    [  62 ] = Wave_Brass,
-    [  63 ] = Wave_Brass,
-    // Reed.
-    [  64 ] = Wave_Reed,
-    [  65 ] = Wave_Reed,
-    [  66 ] = Wave_Reed,
-    [  67 ] = Wave_Reed,
-    [  68 ] = Wave_Reed,
-    [  69 ] = Wave_Reed,
-    [  70 ] = Wave_Reed,
-    [  71 ] = Wave_Reed,
-    // Pipe.
-    [  72 ] = Wave_Pipe,
-    [  73 ] = Wave_Pipe,
-    [  74 ] = Wave_Pipe,
-    [  75 ] = Wave_Pipe,
-    [  76 ] = Wave_Pipe,
-    [  77 ] = Wave_Pipe,
-    [  78 ] = Wave_Pipe,
-    [  79 ] = Wave_Pipe,
-    // Synth Lead.
-    [  80 ] = Wave_Synth,
-    [  81 ] = Wave_Synth,
-    [  82 ] = Wave_Synth,
-    [  83 ] = Wave_Synth,
-    [  84 ] = Wave_Synth,
-    [  85 ] = Wave_Synth,
-    [  86 ] = Wave_Synth,
-    [  87 ] = Wave_Synth,
-    // Synth Pad.
-    [  88 ] = Wave_Synth,
-    [  89 ] = Wave_Synth,
-    [  90 ] = Wave_Synth,
-    [  91 ] = Wave_Synth,
-    [  92 ] = Wave_Synth,
-    [  93 ] = Wave_Synth,
-    [  94 ] = Wave_Synth,
-    [  95 ] = Wave_Synth,
-    // Synth Effects.
-    [  96 ] = Wave_Synth,
-    [  97 ] = Wave_Synth,
-    [  98 ] = Wave_Synth,
-    [  99 ] = Wave_Synth,
-    [ 100 ] = Wave_Synth,
-    [ 101 ] = Wave_Synth,
-    [ 102 ] = Wave_Synth,
-    [ 103 ] = Wave_Synth,
-    // Ethnic.
-    [ 104 ] = Wave_Piano,
-    [ 105 ] = Wave_Piano,
-    [ 106 ] = Wave_Piano,
-    [ 107 ] = Wave_Piano,
-    [ 108 ] = Wave_Piano,
-    [ 109 ] = Wave_Piano,
-    [ 110 ] = Wave_Piano,
-    [ 111 ] = Wave_Piano,
-    // Percussive.
-    [ 112 ] = Wave_Piano,
-    [ 113 ] = Wave_Piano,
-    [ 114 ] = Wave_Piano,
-    [ 115 ] = Wave_Piano,
-    [ 116 ] = Wave_Piano,
-    [ 117 ] = Wave_Piano,
-    [ 118 ] = Wave_Piano,
-    [ 119 ] = Wave_Piano,
-    // Sound Effects.
-    [ 120 ] = Wave_Piano,
-    [ 121 ] = Wave_Piano,
-    [ 122 ] = Wave_Piano,
-    [ 123 ] = Wave_Piano,
-    [ 124 ] = Wave_Piano,
-    [ 125 ] = Wave_Piano,
-    [ 126 ] = Wave_Piano,
-    [ 127 ] = Wave_Piano,
+    [  0 ] = Wave_Piano,
+    [  1 ] = Wave_ChromaticPercussion,
+    [  2 ] = Wave_Organ,
+    [  3 ] = Wave_Guitar,
+    [  4 ] = Wave_Bass,
+    [  5 ] = Wave_Strings1,
+    [  6 ] = Wave_Strings2,
+    [  7 ] = Wave_Brass,
+    [  8 ] = Wave_Reed,
+    [  9 ] = Wave_Pipe,
+    [ 10 ] = Wave_SynthLead,
+    [ 11 ] = Wave_SynthPad,
+    [ 12 ] = Wave_SynthEffects,
+    [ 13 ] = Wave_Ethnic,
+    [ 14 ] = Wave_Percussive,
+    [ 15 ] = Wave_SoundEffects,
 };
 
 static Args
@@ -1020,9 +935,9 @@ Audio_Play(void* data)
                             bool audible = note->gain > 0;
                             if(audible)
                             {
-                                uint8_t instrument = consumer->meta->instruments[channel];
-                                Wave wave = { modu, consumer->meta, channel, note_index };
-                                mix += WAVE_WAVEFORMS[instrument](&wave, note, 0.0f);
+                                int bank = Meta_GetBank(consumer->meta, channel);
+                                Wave wave = { modu, consumer->meta, channel, note_index, bank };
+                                mix += WAVE_WAVEFORMS[bank](&wave, note, 0.0f);
                             }
                         }
                     }
@@ -1180,7 +1095,7 @@ Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
         // Buffer signal (zero phase).
         float buffer[CONST_VIDEO_SAMPLES] = { 0 };
         {
-            uint8_t instrument = meta->instruments[channel];
+            int bank = Meta_GetBank(meta, channel);
             for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
             {
                 Note note = notes->note[channel][note_index];
@@ -1188,9 +1103,9 @@ Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
                 if(note.on)
                 {
                     note.progress = modu.progress = 0;
-                    Wave wave = { &modu, meta, channel, note_index };
+                    Wave wave = { &modu, meta, channel, note_index, bank };
                     for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-                        buffer[i] += WAVE_WAVEFORMS[instrument](&wave, &note, 0.0f);
+                        buffer[i] += WAVE_WAVEFORMS[bank](&wave, &note, 0.0f);
                 }
             }
         }
