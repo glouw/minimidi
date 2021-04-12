@@ -1,31 +1,32 @@
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 
+#define CONST_PI (3.14159265358979323846f)
+#define CONST_NOTE_ATTACK (4)
+#define CONST_NOTE_AMPLIFICATION (6)
+#define CONST_NOTES_MAX (128)
+#define CONST_CHANNEL_MAX (16)
+#define CONST_NOTE_DECAY (500)
+#define CONST_BEND_DEFAULT (8192)
+#define CONST_SAMPLE_FREQ (44100)
+#define CONST_XRES (1024)
+#define CONST_YRES (768)
+#define CONST_VIDEO_SAMPLES (2048)
+#define CONST_VIDEO_GRAIN (5)
+#define CONST_VIDEO_POINT_COUNT (CONST_VIDEO_SAMPLES / CONST_VIDEO_GRAIN)
+#define CONST_MODULATION_GAIN (512)
+#define CONST_BANK_WIDTH (8)
+#define CONST_FONT_H (9)
+#define CONST_FONT_W (7)
+#define CONST_FONT_M (2)
+#define CONST_FONT_RENDER_H (CONST_FONT_M * CONST_FONT_H)
+#define CONST_FONT_RENDER_W (CONST_FONT_M * CONST_FONT_W)
+
 static bool DONE = false;
-
-static const float PI = 3.14159265358979323846f;
-
-typedef enum
-{
-    CONST_NOTE_ATTACK = 4,
-    CONST_NOTE_AMPLIFICATION = 6,
-    CONST_NOTES_MAX = 128,
-    CONST_CHANNEL_MAX = 16,
-    CONST_NOTE_DECAY = 400,
-    CONST_BEND_DEFAULT = 8192,
-    CONST_SAMPLE_FREQ = 44100,
-    CONST_XRES = 1024,
-    CONST_YRES = 768,
-    CONST_VIDEO_SAMPLES = 2048,
-    CONST_VIDEO_GRAIN = 5,
-    CONST_MODULATION_GAIN = 512,
-    CONST_BANK_WIDTH = 8,
-}
-Const;
 
 enum
 {
@@ -41,6 +42,7 @@ typedef struct
     uint32_t tempo;
     int instruments[CONST_CHANNEL_MAX];
     int bend[CONST_CHANNEL_MAX];
+    float volume[CONST_CHANNEL_MAX];
 }
 Meta;
 
@@ -114,6 +116,7 @@ typedef struct
 {
     SDL_Window* window;
     SDL_Renderer* renderer;
+    SDL_Texture* font;
 }
 Video;
 
@@ -243,7 +246,7 @@ static float
 Note_Step(Note* note, float progress)
 {
     float freq = Note_Freq(note);
-    return (progress * (2.0f * PI) * freq) / CONST_SAMPLE_FREQ;
+    return (progress * (2.0f * CONST_PI) * freq) / CONST_SAMPLE_FREQ;
 }
 
 static float
@@ -347,7 +350,7 @@ Flatten(int16_t gain)
 static float
 Wave_GetFMMultiplier(Wave* wave)
 {
-    return (PI / 8.0f) + (PI / 4.0f) * wave->bank / (float) CONST_BANK_WIDTH;
+    return (CONST_PI / 8.0f) + (CONST_PI / 4.0f) * wave->bank / (float) CONST_BANK_WIDTH;
 }
 
 static int16_t
@@ -362,7 +365,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SIN, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_SIN, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -370,7 +373,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -378,7 +381,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRH, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRH, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -386,7 +389,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -394,7 +397,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -402,7 +405,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -410,7 +413,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -418,7 +421,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.80f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 1.0f);
 }
 
 static int16_t
@@ -426,7 +429,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SQR, Wave_TRI, 0.35f);
+    return Wave_FM(wave, note, Wave_SIN, Wave_TRI, 0.8f);
 }
 
 static int16_t
@@ -434,7 +437,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.30f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_TRI, 0.8f);
 }
 
 static int16_t
@@ -442,7 +445,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.35f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.7f);
 }
 
 static int16_t
@@ -450,7 +453,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SQR, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_SQR, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -458,7 +461,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -466,7 +469,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.40f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -667,7 +670,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
             if(!IsPercussive(channel))
             {
                 Note* note = &notes->note[channel][note_index];
-                note->gain_setpoint = CONST_NOTE_ATTACK * note_velocity;
+                note->gain_setpoint = CONST_NOTE_ATTACK * note_velocity * meta->volume[channel];
                 note->on = true;
                 meta->bend[channel] = CONST_BEND_DEFAULT;
             }
@@ -687,18 +690,11 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
             uint8_t value = Track_U8(track);
             switch(type)
             {
-                // Channel Volume.
                 case 0x07:
-                {
-                    for(uint32_t note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
-                    {
-                        Note* note = &notes->note[channel][note_index];
-                        bool audible = note->gain_setpoint > 0;
-                        if(audible)
-                            note->gain_setpoint = CONST_NOTE_ATTACK * value;
-                    }
+                    meta->volume[channel] = value / 127.0f;
                     break;
-                }
+                default:
+                    break;
             }
             break;
         }
@@ -707,7 +703,6 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
         {
             uint8_t program = Track_U8(track);
             meta->instruments[channel] = program;
-            printf("channel[%2d] = %d\n", channel, program);
             break;
         }
         // Channel Aftertouch.
@@ -1026,9 +1021,10 @@ Midi_Play(Midi* midi, Notes* notes, Meta* meta)
             Track_Play(&midi->track[i], notes, meta);
         uint32_t microseconds = Midi_ToMicrosecondDelay(midi, meta);
         uint32_t milliseconds = roundf(microseconds / 1000.0f);
-        SDL_Delay(milliseconds);
         if(Midi_Done(midi))
             DONE = true;
+        else
+            SDL_Delay(milliseconds);
     }
 }
 
@@ -1037,6 +1033,10 @@ Video_Init(void)
 {
     Video video;
     SDL_CreateWindowAndRenderer(CONST_XRES, CONST_YRES, 0, &video.window, &video.renderer);
+    SDL_Surface* font = SDL_LoadBMP("font.bmp");
+    SDL_SetColorKey(font, SDL_TRUE, SDL_MapRGB(font->format, 0x0, 0x0, 0x0));
+    video.font = SDL_CreateTextureFromSurface(video.renderer, font);
+    SDL_FreeSurface(font);
     return video;
 }
 
@@ -1045,38 +1045,62 @@ Video_Free(Video* video)
 {
     SDL_DestroyRenderer(video->renderer);
     SDL_DestroyWindow(video->window);
+    SDL_DestroyTexture(video->font);
+}
+
+void
+Video_Putc(Video* video, int x, int y, char c)
+{
+    SDL_Rect s;
+    s.w = CONST_FONT_W;
+    s.h = CONST_FONT_H;
+    switch(c)
+    {
+        case ' ': s.x =  0 * s.w; s.y = 0 * s.h; break;
+        case '0': s.x = 16 * s.w; s.y = 0 * s.h; break;
+        case '1': s.x = 17 * s.w; s.y = 0 * s.h; break;
+        case '2': s.x =  0 * s.w; s.y = 1 * s.h; break;
+        case '3': s.x =  1 * s.w; s.y = 1 * s.h; break;
+        case '4': s.x =  2 * s.w; s.y = 1 * s.h; break;
+        case '5': s.x =  3 * s.w; s.y = 1 * s.h; break;
+        case '6': s.x =  4 * s.w; s.y = 1 * s.h; break;
+        case '7': s.x =  5 * s.w; s.y = 1 * s.h; break;
+        case '8': s.x =  6 * s.w; s.y = 1 * s.h; break;
+        case '9': s.x =  7 * s.w; s.y = 1 * s.h; break;
+        case ':': s.x =  8 * s.w; s.y = 1 * s.h; break;
+    }
+    SDL_Rect d;
+    d.w = CONST_FONT_RENDER_W;
+    d.h = CONST_FONT_RENDER_H;
+    d.x = x; 
+    d.y = y;
+    SDL_RenderCopy(video->renderer, video->font, &s, &d);
+}
+
+void
+Video_Puts(Video* video, int x, int y, char* s)
+{
+    int xx = 0;
+    while(*s)
+        Video_Putc(video, x + xx++ * CONST_FONT_RENDER_W, y, *s++);
 }
 
 void
 Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
 {
-    uint32_t colors[CONST_CHANNEL_MAX] = {
-        0x414b7e, 0x636fb2, 0xadc4ff, 0xffffff, 0xffccd7, 0xff7fbd, 0x872450, 0xe52d40,
-        0xef604a, 0xffd877, 0x00cc8b, 0x005a75, 0x513ae8, 0x19baff, 0x7731a5, 0xb97cff,
-    };
     int h = CONST_YRES / CONST_CHANNEL_MAX;
     int amp = h / 2;
-    int point_count = CONST_VIDEO_SAMPLES / CONST_VIDEO_GRAIN;
     // Clear screen.
     {
         SDL_SetRenderDrawColor(video->renderer, 0x00, 0x00, 0x00, 0x00);
         SDL_RenderClear(video->renderer);
     }
-    // Draw channel lines.
-    {
-        SDL_SetRenderDrawColor(video->renderer, 0xAA, 0xAA, 0xAA, 0xAA);
-        for(int i = 0; i < CONST_CHANNEL_MAX; i++)
-        {
-            int y = i * h;
-            SDL_RenderDrawLine(video->renderer, 0, y, CONST_XRES, y);
-        }
-    }
     for(int channel = 0; channel < CONST_CHANNEL_MAX; channel++)
     {
+        int bank = Meta_GetBank(meta, channel);
         // Buffer signal (zero phase).
         float buffer[CONST_VIDEO_SAMPLES] = { 0 };
         {
-            int bank = Meta_GetBank(meta, channel);
             for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
             {
                 Note note = notes->note[channel][note_index];
@@ -1100,7 +1124,7 @@ Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
                 buffer[i] /= max;
         }
         // Collect signal into an array of points.
-        SDL_Point points[point_count];
+        SDL_Point points[CONST_VIDEO_POINT_COUNT];
         {
             int index = 0;
             for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
@@ -1113,12 +1137,22 @@ Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
         }
         // Draw signal points.
         {
+            uint32_t colors[CONST_CHANNEL_MAX] = {
+                0x414b7e, 0x636fb2, 0xadc4ff, 0xffffff, 0xffccd7, 0xff7fbd, 0x872450, 0xe52d40,
+                0xef604a, 0xffd877, 0x00cc8b, 0x005a75, 0x513ae8, 0x19baff, 0x7731a5, 0xb97cff,
+            };
             uint32_t color = colors[channel];
             uint8_t r = color >> 0x10;
             uint8_t g = color >> 0x08;
             uint8_t b = color >> 0x00;
             SDL_SetRenderDrawColor(video->renderer, r, g, b, 0xFF);
-            SDL_RenderDrawLines(video->renderer, points, point_count);
+            SDL_RenderDrawLines(video->renderer, points, CONST_VIDEO_POINT_COUNT);
+        }
+        // Draw channel instrument labels.
+        {
+            char str[128] = { 0 };
+            sprintf(str, "%2d : %2d", channel, bank);
+            Video_Puts(video, 0, channel * h + h - CONST_FONT_RENDER_H, str);
         }
     }
     SDL_RenderPresent(video->renderer);
