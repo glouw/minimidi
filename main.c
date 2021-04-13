@@ -10,7 +10,7 @@
 #define CONST_NOTE_AMPLIFICATION (6)
 #define CONST_NOTES_MAX (128)
 #define CONST_CHANNEL_MAX (16)
-#define CONST_NOTE_DECAY (500)
+#define CONST_NOTE_DECAY (256)
 #define CONST_BEND_DEFAULT (8192)
 #define CONST_SAMPLE_FREQ (44100)
 #define CONST_XRES (1024)
@@ -25,6 +25,7 @@
 #define CONST_FONT_M (2)
 #define CONST_FONT_RENDER_H (CONST_FONT_M * CONST_FONT_H)
 #define CONST_FONT_RENDER_W (CONST_FONT_M * CONST_FONT_W)
+#define CONST_CHANNEL_HEIGHT (CONST_YRES / CONST_CHANNEL_MAX)
 
 static bool DONE = false;
 
@@ -365,7 +366,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SIN, Wave_SIN, 0.8f);
+    return Wave_FM(wave, note, Wave_SIN, Wave_SIN, 0.7f);
 }
 
 static int16_t
@@ -373,7 +374,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.8f);
+    return Wave_FM(wave, note, Wave_TRI, Wave_SIN, 0.6f);
 }
 
 static int16_t
@@ -429,7 +430,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SIN, Wave_TRI, 0.8f);
+    return Wave_FM(wave, note, Wave_SQR, Wave_TRI, 0.8f);
 }
 
 static int16_t
@@ -437,7 +438,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNH, Wave_TRI, 0.8f);
+    return Wave_FM(wave, note, Wave_TRH, Wave_SIN, 0.8f);
 }
 
 static int16_t
@@ -445,7 +446,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.7f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.6f);
 }
 
 static int16_t
@@ -565,6 +566,13 @@ Track_U8(Track* track)
     return byte;
 }
 
+static void
+Track_Spin(Track* track, int size)
+{
+    while(size--)
+        Track_U8(track);
+}
+
 static uint32_t
 Track_Var(Track* track)
 {
@@ -679,8 +687,7 @@ Track_RealEvent(Track* track, Meta* meta, Notes* notes, uint8_t leader)
         // Note Aftertouch.
         case 0xA:
         {
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 2);
             break;
         }
         // Controller.
@@ -736,9 +743,7 @@ Track_MetaEvent(Track* track, Meta* meta)
         // Sequence Number.
         case 0x00:
         {
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 3);
             break;
         }
         case 0x01: // Text Event.
@@ -757,15 +762,13 @@ Track_MetaEvent(Track* track, Meta* meta)
         // Channel Prefix.
         case 0x20:
         {
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 2);
             break;
         }
         // Midi Port.
         case 0x21:
         {
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 2);
             break;
         }
         // End of Track.
@@ -787,30 +790,19 @@ Track_MetaEvent(Track* track, Meta* meta)
         // SMPTE Offset.
         case 0X54:
         {
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 6);
             break;
         }
         // Time Signature.
         case 0x58:
         {
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 5);
             break;
         }
         // Key Signature.
         case 0x59:
         {
-            Track_U8(track);
-            Track_U8(track);
-            Track_U8(track);
+            Track_Spin(track, 3);
             break;
         }
         case 0xF0: // Sysex Start.
@@ -1085,75 +1077,74 @@ Video_Puts(Video* video, int x, int y, char* s)
         Video_Putc(video, x + xx++ * CONST_FONT_RENDER_W, y, *s++);
 }
 
+static void
+Buffer(SDL_Point points[], Meta* meta, Notes* notes, Notes* modus, int channel)
+{
+    float buffer[CONST_VIDEO_SAMPLES] = { 0 };
+    int bank = Meta_GetBank(meta, channel);
+    for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
+    {
+        Note note = notes->note[channel][note_index];
+        Note modu = modus->note[channel][note_index];
+        if(note.on)
+        {
+            note.progress = modu.progress = 0;
+            Wave wave = { &modu, meta, channel, note_index, bank };
+            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+                buffer[i] += WAVE_WAVEFORMS[bank](&wave, &note, 0.0f);
+        }
+    }
+    float max = 0;
+    for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+        if(buffer[i] > max)
+            max = buffer[i];
+    for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+        buffer[i] /= max;
+    int index = 0;
+    for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
+        if(i % CONST_VIDEO_GRAIN == 0)
+        {
+            int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
+            int y = CONST_CHANNEL_HEIGHT * (channel - 0.5f * (buffer[i] - 1.0f));
+            points[index++] = (SDL_Point) { x, y };
+        }
+}
+
+static void
+Video_Clear(Video* video)
+{
+    SDL_SetRenderDrawColor(video->renderer, 0x00, 0x00, 0x00, 0x00);
+    SDL_RenderClear(video->renderer);
+}
+
+static void
+Video_DrawChannel(Video* video, Meta* meta, SDL_Point points[], int channel)
+{
+    uint32_t colors[CONST_CHANNEL_MAX] = {
+        0x414b7e, 0x636fb2, 0xadc4ff, 0xffffff, 0xffccd7, 0xff7fbd, 0x872450, 0xe52d40,
+        0xef604a, 0xffd877, 0x00cc8b, 0x005a75, 0x513ae8, 0x19baff, 0x7731a5, 0xb97cff,
+    };
+    uint32_t color = colors[channel];
+    uint8_t r = color >> 0x10;
+    uint8_t g = color >> 0x08;
+    uint8_t b = color >> 0x00;
+    SDL_SetRenderDrawColor(video->renderer, r, g, b, 0xFF);
+    SDL_RenderDrawLines(video->renderer, points, CONST_VIDEO_POINT_COUNT);
+    int bank = Meta_GetBank(meta, channel);
+    char str[128] = { 0 };
+    sprintf(str, "%2d : %2d", channel, bank);
+    Video_Puts(video, 0, CONST_CHANNEL_HEIGHT * (channel + 1) - CONST_FONT_RENDER_H, str);
+}
+
 void
 Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
 {
-    int h = CONST_YRES / CONST_CHANNEL_MAX;
-    int amp = h / 2;
-    // Clear screen.
-    {
-        SDL_SetRenderDrawColor(video->renderer, 0x00, 0x00, 0x00, 0x00);
-        SDL_RenderClear(video->renderer);
-    }
+    Video_Clear(video);
     for(int channel = 0; channel < CONST_CHANNEL_MAX; channel++)
     {
-        int bank = Meta_GetBank(meta, channel);
-        // Buffer signal (zero phase).
-        float buffer[CONST_VIDEO_SAMPLES] = { 0 };
-        {
-            for(int note_index = 0; note_index < CONST_NOTES_MAX; note_index++)
-            {
-                Note note = notes->note[channel][note_index];
-                Note modu = modus->note[channel][note_index];
-                if(note.on)
-                {
-                    note.progress = modu.progress = 0;
-                    Wave wave = { &modu, meta, channel, note_index, bank };
-                    for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-                        buffer[i] += WAVE_WAVEFORMS[bank](&wave, &note, 0.0f);
-                }
-            }
-        }
-        // Scale signal.
-        {
-            float max = 0;
-            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-                if(buffer[i] > max)
-                    max = buffer[i];
-            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-                buffer[i] /= max;
-        }
-        // Collect signal into an array of points.
         SDL_Point points[CONST_VIDEO_POINT_COUNT];
-        {
-            int index = 0;
-            for(int i = 0; i < CONST_VIDEO_SAMPLES; i++)
-                if(i % CONST_VIDEO_GRAIN == 0)
-                {
-                    int x = CONST_XRES * (i / (float) CONST_VIDEO_SAMPLES);
-                    int y = channel * h - amp * (buffer[i] - 1.0f);
-                    points[index++] = (SDL_Point) { x, y };
-                }
-        }
-        // Draw signal points.
-        {
-            uint32_t colors[CONST_CHANNEL_MAX] = {
-                0x414b7e, 0x636fb2, 0xadc4ff, 0xffffff, 0xffccd7, 0xff7fbd, 0x872450, 0xe52d40,
-                0xef604a, 0xffd877, 0x00cc8b, 0x005a75, 0x513ae8, 0x19baff, 0x7731a5, 0xb97cff,
-            };
-            uint32_t color = colors[channel];
-            uint8_t r = color >> 0x10;
-            uint8_t g = color >> 0x08;
-            uint8_t b = color >> 0x00;
-            SDL_SetRenderDrawColor(video->renderer, r, g, b, 0xFF);
-            SDL_RenderDrawLines(video->renderer, points, CONST_VIDEO_POINT_COUNT);
-        }
-        // Draw channel instrument labels.
-        {
-            char str[128] = { 0 };
-            sprintf(str, "%2d : %2d", channel, bank);
-            Video_Puts(video, 0, channel * h + h - CONST_FONT_RENDER_H, str);
-        }
+        Buffer(points, meta, notes, modus, channel);
+        Video_DrawChannel(video, meta, points, channel);
     }
     SDL_RenderPresent(video->renderer);
 }
