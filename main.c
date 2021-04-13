@@ -7,10 +7,10 @@
 
 #define CONST_PI (3.14159265358979323846f)
 #define CONST_NOTE_ATTACK (4)
-#define CONST_NOTE_AMPLIFICATION (6)
+#define CONST_NOTE_AMPLIFICATION (15)
 #define CONST_NOTES_MAX (128)
 #define CONST_CHANNEL_MAX (16)
-#define CONST_NOTE_DECAY (256)
+#define CONST_NOTE_DECAY (512)
 #define CONST_BEND_DEFAULT (8192)
 #define CONST_SAMPLE_FREQ (44100)
 #define CONST_XRES (1024)
@@ -179,13 +179,15 @@ Bytes_U8(Bytes* bytes, uint32_t index)
 static uint16_t
 Bytes_U16(Bytes* bytes, uint32_t index)
 {
-    return Bytes_U8(bytes, index + 0) << 8 | Bytes_U8(bytes, index + 1);
+    return Bytes_U8(bytes, index + 0) << 8
+         | Bytes_U8(bytes, index + 1);
 }
 
 static uint32_t
 Bytes_U32(Bytes* bytes, uint32_t index)
 {
-    return Bytes_U16(bytes, index + 0) << 16 | Bytes_U16(bytes, index + 2);
+    return Bytes_U16(bytes, index + 0) << 16
+         | Bytes_U16(bytes, index + 2);
 }
 
 static void
@@ -414,7 +416,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.8f);
+    return Wave_FM(wave, note, Wave_SNQ, Wave_SIN, 0.6f);
 }
 
 static int16_t
@@ -430,7 +432,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SQR, Wave_TRI, 0.8f);
+    return Wave_FM(wave, note, Wave_SQR, Wave_TRH, 0.7f);
 }
 
 static int16_t
@@ -438,7 +440,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_TRH, Wave_SIN, 0.8f);
+    return Wave_FM(wave, note, Wave_TRH, Wave_SIN, 0.6f);
 }
 
 static int16_t
@@ -446,7 +448,7 @@ static int16_t
 (Wave* wave, Note* note, float fm)
 {
     (void) fm;
-    return Wave_FM(wave, note, Wave_SNH, Wave_SIN, 0.6f);
+    return Wave_FM(wave, note, Wave_SNH, Wave_TRI, 0.5f);
 }
 
 static int16_t
@@ -1043,29 +1045,29 @@ Video_Free(Video* video)
 void
 Video_Putc(Video* video, int x, int y, char c)
 {
-    SDL_Rect s;
-    s.w = CONST_FONT_W;
-    s.h = CONST_FONT_H;
+    SDL_Rect s = { 0, 0, CONST_FONT_W, CONST_FONT_H };
     switch(c)
     {
-        case ' ': s.x =  0 * s.w; s.y = 0 * s.h; break;
-        case '0': s.x = 16 * s.w; s.y = 0 * s.h; break;
-        case '1': s.x = 17 * s.w; s.y = 0 * s.h; break;
-        case '2': s.x =  0 * s.w; s.y = 1 * s.h; break;
-        case '3': s.x =  1 * s.w; s.y = 1 * s.h; break;
-        case '4': s.x =  2 * s.w; s.y = 1 * s.h; break;
-        case '5': s.x =  3 * s.w; s.y = 1 * s.h; break;
-        case '6': s.x =  4 * s.w; s.y = 1 * s.h; break;
-        case '7': s.x =  5 * s.w; s.y = 1 * s.h; break;
-        case '8': s.x =  6 * s.w; s.y = 1 * s.h; break;
-        case '9': s.x =  7 * s.w; s.y = 1 * s.h; break;
-        case ':': s.x =  8 * s.w; s.y = 1 * s.h; break;
+        case ' ': s.x =  0; s.y = 0; break;
+        case '0': s.x = 16; s.y = 0; break;
+        case '1': s.x = 17; s.y = 0; break;
+        case '2': s.x =  0; s.y = 1; break;
+        case '3': s.x =  1; s.y = 1; break;
+        case '4': s.x =  2; s.y = 1; break;
+        case '5': s.x =  3; s.y = 1; break;
+        case '6': s.x =  4; s.y = 1; break;
+        case '7': s.x =  5; s.y = 1; break;
+        case '8': s.x =  6; s.y = 1; break;
+        case '9': s.x =  7; s.y = 1; break;
+        case ':': s.x =  8; s.y = 1; break;
+        default:
+            printf("Video_Putc character '%c' not supported\n", c);
+            exit(1);
+            break;
     }
-    SDL_Rect d;
-    d.w = CONST_FONT_RENDER_W;
-    d.h = CONST_FONT_RENDER_H;
-    d.x = x; 
-    d.y = y;
+    s.x *= s.w;
+    s.y *= s.h;
+    SDL_Rect d = { x, y, CONST_FONT_RENDER_W, CONST_FONT_RENDER_H };
     SDL_RenderCopy(video->renderer, video->font, &s, &d);
 }
 
@@ -1136,7 +1138,7 @@ Video_DrawChannel(Video* video, Meta* meta, SDL_Point points[], int channel)
     Video_Puts(video, 0, CONST_CHANNEL_HEIGHT * (channel + 1) - CONST_FONT_RENDER_H, str);
 }
 
-void
+static void
 Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
 {
     Video_Clear(video);
@@ -1149,7 +1151,7 @@ Video_Draw(Video* video, Meta* meta, Notes* notes, Notes* modus)
     SDL_RenderPresent(video->renderer);
 }
 
-int
+static int
 Video_Play(void* data)
 {
     Consumer* consumer = data;
