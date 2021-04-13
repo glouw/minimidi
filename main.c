@@ -1022,7 +1022,7 @@ Midi_Play(Midi* midi, Notes* notes, Meta* meta)
     }
 }
 
-Video
+static Video
 Video_Init(void)
 {
     Video video;
@@ -1034,7 +1034,7 @@ Video_Init(void)
     return video;
 }
 
-void
+static void
 Video_Free(Video* video)
 {
     SDL_DestroyRenderer(video->renderer);
@@ -1042,7 +1042,7 @@ Video_Free(Video* video)
     SDL_DestroyTexture(video->font);
 }
 
-void
+static void
 Video_Putc(Video* video, int x, int y, char c)
 {
     SDL_Rect s = { 0, 0, CONST_FONT_W, CONST_FONT_H };
@@ -1071,7 +1071,7 @@ Video_Putc(Video* video, int x, int y, char c)
     SDL_RenderCopy(video->renderer, video->font, &s, &d);
 }
 
-void
+static void
 Video_Puts(Video* video, int x, int y, char* s)
 {
     int xx = 0;
